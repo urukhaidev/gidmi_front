@@ -1,0 +1,793 @@
+---
+interface Props {
+	variant?: "hero" | "inline" | "header";
+	placeholder?: string;
+	action?: string;
+	resultsListId?: string;
+}
+
+const { variant = "hero", placeholder = "Куда вы собираетесь?", action = "/", resultsListId } = Astro.props;
+const searchId = `travel-search-${Math.random().toString(36).slice(2)}`;
+const variantClass = `ts-wrap--${variant}`;
+const showSubmit = variant !== "header";
+const listId = resultsListId ?? `${searchId}-listbox`;
+---
+
+<div
+	id={searchId}
+	class={`ts-wrap ${variantClass}`}
+	data-search-root
+	data-action={action}
+	data-search-list-id={listId}
+>
+	<form class="ts-input-row" method="get" action={action} data-search-form>
+		<label class="ts-sr-only" for={`${searchId}-input`}>Поиск направления</label>
+		<input
+			id={`${searchId}-input`}
+			name="q"
+			type="search"
+			placeholder={placeholder}
+			autocomplete="off"
+			role="combobox"
+			aria-expanded="false"
+			aria-controls={listId}
+			data-search-input
+	/>
+		<span class="ts-spinner" aria-hidden="true" hidden data-search-spinner></span>
+		{showSubmit && <button type="submit">Найти</button>}
+	</form>
+
+	{
+		!resultsListId && (
+			<ul
+				id={listId}
+				class="ts-dropdown"
+				role="listbox"
+				hidden
+				data-search-list
+			></ul>
+		)
+	}
+</div>
+
+<script>
+	type SearchResult = {
+		type: "country" | "city" | "experience";
+		id: string;
+		title: string;
+		url: string;
+		image_url: string | null;
+		count: number;
+	};
+
+	type CitySearchItem = {
+		id: string;
+		title: string;
+		url: string;
+		image_url?: string | null;
+		count: number;
+	};
+
+	type CitySearch = {
+		cityId?: string;
+		cityTitle?: string;
+		categoryTitle?: string;
+		excursionTitle?: string;
+		allCategories?: CitySearchItem | null;
+		allExperiences?: CitySearchItem | null;
+		categories: CitySearchItem[];
+		experiences: CitySearchItem[];
+	} | null;
+
+	type NavigationItem = {
+		url: string;
+	};
+
+	const typeLabels: Record<SearchResult["type"], string> = {
+		country: "Страна",
+		city: "Город",
+		experience: "Экскурсия",
+	};
+
+	const countLabels: Record<SearchResult["type"], string> = {
+		country: "экскурсий",
+		city: "экскурсий",
+		experience: "отзывов",
+	};
+
+	const escapeHtml = (value: string) =>
+		value.replace(/[&<>"']/g, (char) => {
+			const entities: Record<string, string> = {
+				"&": "&amp;",
+				"<": "&lt;",
+				">": "&gt;",
+				'"': "&quot;",
+				"'": "&#039;",
+			};
+			return entities[char] ?? char;
+		});
+
+	const formatCount = (value: number) =>
+		Number(value ?? 0).toLocaleString("ru-RU");
+
+	function setupTravelSearch(root: HTMLElement) {
+		const form = root.querySelector<HTMLFormElement>("[data-search-form]");
+		const input = root.querySelector<HTMLInputElement>("[data-search-input]");
+		const listId = root.dataset.searchListId;
+		const list = listId
+			? document.getElementById(listId) as HTMLUListElement | null
+			: root.querySelector<HTMLUListElement>("[data-search-list]");
+		const spinner = root.querySelector<HTMLElement>("[data-search-spinner]");
+
+		if (!form || !input || !list || !spinner) return;
+
+		let results: SearchResult[] = [];
+		let citySearch: CitySearch = null;
+		let navigationItems: NavigationItem[] = [];
+		let activeIndex = -1;
+		let timer: number | undefined;
+		let controller: AbortController | null = null;
+
+		const close = () => {
+			list.hidden = true;
+			input.setAttribute("aria-expanded", "false");
+			input.removeAttribute("aria-activedescendant");
+			activeIndex = -1;
+		};
+
+		const open = () => {
+			list.hidden = false;
+			input.setAttribute("aria-expanded", "true");
+		};
+
+		const registerItem = (item: NavigationItem) => {
+			const index = navigationItems.length;
+			navigationItems.push(item);
+			return index;
+		};
+
+		const renderSimpleItem = (
+			item: SearchResult,
+			index: number,
+		) => {
+			const isActive = index === activeIndex;
+			const image = item.image_url
+				? `<img class="ts-item__image" src="${escapeHtml(item.image_url)}" alt="" loading="lazy" />`
+				: `<span class="ts-item__image ts-item__image--empty" aria-hidden="true">${escapeHtml(item.title.slice(0, 1))}</span>`;
+
+			return `
+				<li
+					id="${input.id}-opt-${index}"
+					class="ts-item ${isActive ? "ts-item--active" : ""}"
+					role="option"
+					aria-selected="${isActive ? "true" : "false"}"
+					data-search-index="${index}"
+				>
+					${image}
+					<span class="ts-item__content">
+						<span class="ts-item__title">${escapeHtml(item.title)}</span>
+						<span class="ts-item__meta">${escapeHtml(typeLabels[item.type])} · ${formatCount(item.count)} ${escapeHtml(countLabels[item.type])}</span>
+					</span>
+				</li>
+			`;
+		};
+
+		const renderCitySection = (
+			title: string,
+			items: CitySearchItem[],
+			kind: "category" | "experience",
+		) => {
+			if (items.length === 0) return "";
+
+			return `
+				<li class="ts-section" role="presentation">
+					<div class="ts-section__title">${escapeHtml(title)}</div>
+					<div class="ts-section__items">
+						${items
+							.map((item) => {
+								const index = registerItem(item);
+								const isActive = index === activeIndex;
+								const image = kind === "experience"
+									? item.image_url
+										? `<img class="ts-mini__image" src="${escapeHtml(item.image_url)}" alt="" loading="lazy" />`
+										: `<span class="ts-mini__image ts-mini__image--empty" aria-hidden="true">${escapeHtml(item.title.slice(0, 1))}</span>`
+									: "";
+
+								return `
+									<div
+										id="${input.id}-opt-${index}"
+										class="ts-mini ts-mini--${kind} ${isActive ? "ts-mini--active" : ""}"
+										role="option"
+										aria-selected="${isActive ? "true" : "false"}"
+										data-search-index="${index}"
+									>
+										${image}
+										<span class="ts-mini__content">
+											<span class="ts-mini__title">${escapeHtml(item.title)}</span>
+											<span class="ts-mini__meta">${formatCount(item.count)} ${kind === "category" ? "экскурсий" : "отзывов"}</span>
+										</span>
+									</div>
+								`;
+							})
+							.join("")}
+					</div>
+				</li>
+			`;
+		};
+
+		const setLoading = (loading: boolean) => {
+			spinner.hidden = !loading;
+		};
+
+		const render = () => {
+			navigationItems = [];
+			const hasCityDetails = Boolean(
+				citySearch?.categories.length || citySearch?.experiences.length,
+			);
+
+			if (results.length === 0 && !hasCityDetails) {
+				list.innerHTML = `<li class="ts-empty">По этому запросу ничего не найдено.</li>`;
+				open();
+				return;
+			}
+
+			const mainResults = citySearch
+				? results.filter((item) => item.type !== "experience")
+				: results;
+
+			const mainItems = mainResults
+				.map((item) => {
+					const index = registerItem(item);
+					return renderSimpleItem(item, index);
+				})
+				.join("");
+
+			list.innerHTML = [
+				mainItems,
+				renderCitySection(
+					citySearch?.categoryTitle ?? "Категории",
+					[
+						...(citySearch?.allCategories ? [citySearch.allCategories] : []),
+						...(citySearch?.categories ?? []),
+					],
+					"category",
+				),
+				renderCitySection(
+					citySearch?.excursionTitle ?? "Экскурсии",
+					[
+						...(citySearch?.allExperiences ? [citySearch.allExperiences] : []),
+						...(citySearch?.experiences ?? []),
+					],
+					"experience",
+				),
+			].join("");
+
+			open();
+		};
+
+		const setActive = (index: number) => {
+			activeIndex = index;
+			input.setAttribute("aria-activedescendant", `${input.id}-opt-${index}`);
+			render();
+		};
+
+		const navigate = (index: number) => {
+			const item = navigationItems[index];
+			if (!item) return;
+			window.location.href = item.url;
+		};
+
+		const search = (value: string) => {
+			window.clearTimeout(timer);
+			controller?.abort();
+
+			const query = value.trim();
+			if (query.length < 2) {
+				results = [];
+				citySearch = null;
+				setLoading(false);
+				close();
+				return;
+			}
+
+			setLoading(true);
+
+			timer = window.setTimeout(async () => {
+				controller = new AbortController();
+
+				try {
+					const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+						signal: controller.signal,
+						headers: { Accept: "application/json" },
+					});
+
+					if (!response.ok) throw new Error("Search request failed");
+
+					const data = await response.json() as {
+						results?: SearchResult[];
+						citySearch?: CitySearch;
+					};
+					results = data.results ?? [];
+					citySearch = data.citySearch ?? null;
+					activeIndex = -1;
+					render();
+				} catch (error) {
+					if (!controller.signal.aborted) {
+						results = [];
+						citySearch = null;
+						list.innerHTML = `<li class="ts-empty">Поиск временно недоступен.</li>`;
+						open();
+					}
+				} finally {
+					if (!controller.signal.aborted) setLoading(false);
+				}
+			}, 220);
+		};
+
+		input.addEventListener("input", () => search(input.value));
+		input.addEventListener("focus", () => {
+			if (input.value.trim().length >= 2 && list.innerHTML) open();
+		});
+
+		form.addEventListener("submit", (event) => {
+			if (activeIndex >= 0) {
+				event.preventDefault();
+				navigate(activeIndex);
+				return;
+			}
+
+			const query = input.value.trim();
+			if (query.length < 2) {
+				event.preventDefault();
+				input.focus();
+			}
+		});
+
+		input.addEventListener("keydown", (event) => {
+			if (event.key === "Escape") {
+				close();
+				input.blur();
+				return;
+			}
+
+			if (list.hidden || navigationItems.length === 0) return;
+
+			if (event.key === "ArrowDown") {
+				event.preventDefault();
+				setActive(activeIndex < navigationItems.length - 1 ? activeIndex + 1 : 0);
+			}
+
+			if (event.key === "ArrowUp") {
+				event.preventDefault();
+				setActive(activeIndex > 0 ? activeIndex - 1 : navigationItems.length - 1);
+			}
+
+			if (event.key === "Enter" && activeIndex >= 0) {
+				event.preventDefault();
+				navigate(activeIndex);
+			}
+		});
+
+		list.addEventListener("mousedown", (event) => {
+			const item = (event.target as HTMLElement).closest<HTMLElement>("[data-search-index]");
+			if (!item) return;
+			event.preventDefault();
+			navigate(Number(item.dataset.searchIndex));
+		});
+
+		list.addEventListener("mousemove", (event) => {
+			const item = (event.target as HTMLElement).closest<HTMLElement>("[data-search-index]");
+			if (!item) return;
+			const index = Number(item.dataset.searchIndex);
+			if (index !== activeIndex) setActive(index);
+		});
+
+		document.addEventListener("mousedown", (event) => {
+			if (!root.contains(event.target as Node)) close();
+		});
+	}
+
+	const setupAllTravelSearches = () => {
+		document
+			.querySelectorAll<HTMLElement>("[data-search-root]")
+			.forEach((root) => {
+				if (root.dataset.searchReady === "true") return;
+				root.dataset.searchReady = "true";
+				setupTravelSearch(root);
+			});
+	};
+
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", setupAllTravelSearches, { once: true });
+	} else {
+		setupAllTravelSearches();
+	}
+</script>
+
+<style is:global>
+	.ts-wrap {
+		position: relative;
+		width: 100%;
+	}
+
+	.ts-wrap--hero {
+		max-width: 760px;
+		margin-top: 32px;
+	}
+
+	.ts-wrap--inline {
+		max-width: 560px;
+		margin-top: 20px;
+	}
+
+	.ts-wrap--header {
+		max-width: 340px;
+		margin: 0;
+	}
+
+	.ts-input-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto auto;
+		align-items: center;
+		padding: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.22);
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.96);
+		box-shadow: 0 22px 80px rgba(0, 0, 0, 0.24);
+	}
+
+	.ts-wrap--inline .ts-input-row {
+		border-color: rgba(31, 36, 32, 0.14);
+		box-shadow: 0 2px 8px rgba(31, 36, 32, 0.08);
+	}
+
+	.ts-wrap--header .ts-input-row {
+		position: relative;
+		grid-template-columns: 18px minmax(0, 1fr) auto;
+		column-gap: 8px;
+		padding: 3px;
+		border-color: rgba(31, 36, 32, 0.12);
+		background: #f6f6f2;
+		box-shadow: none;
+	}
+
+	.ts-wrap--header .ts-input-row::before {
+		content: "";
+		grid-column: 1;
+		justify-self: center;
+		width: 14px;
+		height: 14px;
+		border: 2px solid #687067;
+		border-radius: 50%;
+		box-sizing: border-box;
+	}
+
+	.ts-wrap--header .ts-input-row::after {
+		content: "";
+		position: absolute;
+		left: 18px;
+		top: 50%;
+		width: 7px;
+		height: 2px;
+		border-radius: 999px;
+		background: #687067;
+		transform: translateY(5px) rotate(45deg);
+		transform-origin: center;
+	}
+
+	.ts-input-row input[type="search"] {
+		min-width: 0;
+		height: 52px;
+		border: 0;
+		padding: 0 18px;
+		color: #1f2420;
+		background: transparent;
+		font-family: inherit;
+		font-size: 1.06rem;
+		outline: none;
+	}
+
+	.ts-input-row input[type="search"]::placeholder {
+		color: #9da49c;
+	}
+
+	.ts-input-row button {
+		height: 52px;
+		border: 0;
+		border-radius: 6px;
+		padding: 0 20px;
+		color: #fff;
+		background: #315d63;
+		font: inherit;
+		font-weight: 800;
+		cursor: pointer;
+	}
+
+	.ts-input-row button:hover {
+		background: #264d52;
+	}
+
+	.ts-wrap--header .ts-input-row input[type="search"] {
+		grid-column: 2;
+		height: 38px;
+		padding: 0 8px 0 0;
+		font-size: 0.92rem;
+	}
+
+	.ts-wrap--header .ts-input-row button {
+		height: 38px;
+		padding: 0 12px;
+		font-size: 0.9rem;
+	}
+
+	.ts-wrap--header .ts-spinner {
+		grid-column: 3;
+		width: 16px;
+		height: 16px;
+		margin-right: 8px;
+		border-width: 2px;
+	}
+
+	.ts-spinner {
+		width: 22px;
+		height: 22px;
+		margin-right: 14px;
+		border: 3px solid rgba(49, 93, 99, 0.18);
+		border-top-color: #315d63;
+		border-radius: 50%;
+		animation: ts-spin 0.6s linear infinite;
+	}
+
+	.ts-spinner[hidden],
+	.ts-dropdown[hidden] {
+		display: none;
+	}
+
+	@keyframes ts-spin {
+		to { transform: rotate(360deg); }
+	}
+
+	.ts-dropdown {
+		position: absolute;
+		top: calc(100% + 8px);
+		left: 0;
+		right: 0;
+		z-index: 30;
+		display: grid;
+		gap: 2px;
+		max-height: 420px;
+		overflow-y: auto;
+		margin: 0;
+		padding: 6px;
+		border: 1px solid rgba(31, 36, 32, 0.12);
+		border-radius: 10px;
+		background: #fff;
+		box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+		list-style: none;
+		color: #1f2420;
+	}
+
+	.ts-wrap--header .ts-dropdown {
+		left: auto;
+		right: 0;
+		width: min(420px, calc(100vw - 32px));
+		max-height: 360px;
+	}
+
+	.ts-item {
+		display: grid;
+		grid-template-columns: 54px minmax(0, 1fr);
+		gap: 12px;
+		align-items: center;
+		min-height: 66px;
+		padding: 8px;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: background 0.1s;
+	}
+
+	.ts-item:hover,
+	.ts-item--active {
+		background: #f4f3ef;
+	}
+
+	.ts-item__image {
+		display: grid;
+		place-items: center;
+		width: 54px;
+		height: 50px;
+		border-radius: 6px;
+		background: #315d63;
+		color: #fff;
+		object-fit: cover;
+		font-weight: 850;
+	}
+
+	.ts-item__image--empty {
+		background: #ece8dd;
+		color: #315d63;
+	}
+
+	.ts-item__content {
+		display: grid;
+		gap: 4px;
+		min-width: 0;
+	}
+
+	.ts-item__title {
+		overflow: hidden;
+		font-weight: 800;
+		line-height: 1.3;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.ts-item__meta {
+		overflow: hidden;
+		color: #687067;
+		font-size: 0.9rem;
+		font-weight: 650;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.ts-empty {
+		padding: 16px 14px;
+		color: #687067;
+		font-size: 0.98rem;
+	}
+
+	.ts-section {
+		display: grid;
+		gap: 8px;
+		padding: 8px 6px 6px;
+		border-top: 1px solid rgba(31, 36, 32, 0.08);
+	}
+
+	.ts-section:first-child {
+		border-top: 0;
+	}
+
+	.ts-section__title {
+		padding: 0 4px;
+		color: #687067;
+		font-size: 0.78rem;
+		font-weight: 850;
+		letter-spacing: 0;
+		text-transform: uppercase;
+	}
+
+	.ts-section__items {
+		display: grid;
+		gap: 4px;
+	}
+
+	.ts-mini {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 10px;
+		min-height: 38px;
+		padding: 8px;
+		border-radius: 8px;
+		cursor: pointer;
+	}
+
+	.ts-mini--experience {
+		grid-template-columns: 46px minmax(0, 1fr);
+	}
+
+	.ts-mini:hover,
+	.ts-mini--active {
+		background: #f4f3ef;
+	}
+
+	.ts-mini__image {
+		display: grid;
+		place-items: center;
+		width: 46px;
+		height: 40px;
+		border-radius: 6px;
+		background: #315d63;
+		color: #fff;
+		object-fit: cover;
+		font-weight: 850;
+	}
+
+	.ts-mini__image--empty {
+		background: #ece8dd;
+		color: #315d63;
+	}
+
+	.ts-mini__content {
+		display: grid;
+		gap: 3px;
+		min-width: 0;
+	}
+
+	.ts-mini__title {
+		overflow: hidden;
+		color: #1f2420;
+		font-size: 0.94rem;
+		font-weight: 800;
+		line-height: 1.25;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.ts-mini__meta {
+		overflow: hidden;
+		color: #687067;
+		font-size: 0.82rem;
+		font-weight: 650;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.ts-sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
+	}
+
+	@media (max-width: 760px) {
+		.ts-wrap--hero {
+			margin-top: 24px;
+		}
+
+		.ts-wrap--header {
+			max-width: none;
+		}
+
+		.ts-input-row {
+			grid-template-columns: minmax(0, 1fr) auto;
+		}
+
+		.ts-input-row input[type="search"] {
+			height: 46px;
+			padding: 0 12px;
+			font-size: 1rem;
+		}
+
+		.ts-input-row button {
+			height: 46px;
+			padding: 0 14px;
+		}
+
+		.ts-wrap--header .ts-input-row input[type="search"] {
+			height: 42px;
+			font-size: 0.96rem;
+		}
+
+		.ts-wrap--header .ts-input-row {
+			grid-template-columns: 18px minmax(0, 1fr) auto;
+		}
+
+		.ts-spinner {
+			grid-row: 1;
+			grid-column: 2;
+			margin-right: 84px;
+		}
+
+		.ts-wrap--header .ts-spinner {
+			grid-column: 3;
+			margin-right: 8px;
+		}
+
+		.ts-dropdown {
+			max-height: 340px;
+		}
+
+		.ts-wrap--header .ts-dropdown {
+			left: 0;
+			right: 0;
+			width: auto;
+		}
+	}
+</style>

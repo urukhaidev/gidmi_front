@@ -1,0 +1,13 @@
+---
+import { getExperience, experienceHref } from "../../lib/travel-db.js";
+
+const { id } = Astro.params;
+const experienceResult = await getExperience(id);
+const experience = experienceResult.rows[0];
+
+if (!experience) {
+	return Astro.redirect("/404");
+}
+
+return Astro.redirect(`${experienceHref(experience)}${Astro.url.search}`, 301);
+---

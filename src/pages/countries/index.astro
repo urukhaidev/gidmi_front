@@ -1,0 +1,41 @@
+---
+import Base from "../../layouts/Base.astro";
+import PlaceCard from "../../components/PlaceCard.astro";
+import TravelPageStyles from "../../components/TravelPageStyles.astro";
+import SearchBox from "../../components/SearchBox.astro";
+import { countryHref, getCountries } from "../../lib/travel-db.js";
+
+const { rows: countries, error } = await getCountries(160);
+
+Astro.response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=60");
+---
+
+<Base title="Страны" description="Страны с экскурсиями и маршрутами.">
+	<TravelPageStyles />
+	<section class="page-hero">
+		{countries[0]?.image_url && <img src={countries[0].image_url} alt="" />}
+		<div class="page-hero__inner">
+			<p class="eyebrow">Направления</p>
+			<h1>Страны</h1>
+			<p class="page-lead">Выберите страну и посмотрите популярные экскурсии.</p>
+			<SearchBox variant="inline" placeholder="Поиск страны, города или экскурсии" />
+		</div>
+	</section>
+
+	<section class="section">
+		{error && <div class="empty-card">{error}</div>}
+		<div class="grid">
+			{
+				countries.map((country) => (
+					<PlaceCard
+						href={countryHref(country)}
+						name={country.name}
+						count={country.experience_count}
+						secondaryCount={country.guides_count}
+						image={country.image_url}
+					/>
+				))
+			}
+		</div>
+	</section>
+</Base>

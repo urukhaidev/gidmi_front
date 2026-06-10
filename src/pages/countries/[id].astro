@@ -1,0 +1,315 @@
+---
+import Base from "../../layouts/Base.astro";
+import ExperienceCard from "../../components/ExperienceCard.astro";
+import TravelPageStyles from "../../components/TravelPageStyles.astro";
+import {
+	cityHref,
+	countryHref,
+	getCountry,
+	getCountryCities,
+	getExperiences,
+	getGuides,
+	getSeoBlock,
+} from "../../lib/travel-db.js";
+
+const { id } = Astro.params;
+const countryResult = await getCountry(id);
+const country = countryResult.rows[0];
+
+if (!country) {
+	return Astro.redirect("/404");
+}
+
+const preferredPath = countryHref(country);
+const isRootRewrite = Astro.url.searchParams.get("__root") === "1";
+if (!isRootRewrite && Astro.url.pathname !== preferredPath) {
+	return Astro.redirect(`${preferredPath}${Astro.url.search}`);
+}
+
+const [citiesResult, experiencesResult, guidesResult, seoResult] = await Promise.all([
+	getCountryCities(country.id, 120),
+	getExperiences({ limit: 12, countryId: country.id }),
+	getGuides({ limit: 12, countryId: country.id }),
+	getSeoBlock("country", country.id),
+]);
+
+const cities = citiesResult.rows;
+const popularCities = cities.slice(0, 20);
+const otherCities = cities.slice(20);
+const experiences = experiencesResult.rows;
+const guides = guidesResult.rows;
+const seoBlock = seoResult.rows[0];
+
+const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
+const countryLead = `${formatCount(country.experience_count)} экскурсий и маршрутов${
+	country.guides_count > 0 ? `, ${formatCount(country.guides_count)} гидов` : ""
+}.`;
+
+Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=120");
+---
+
+<Base title={country.name} description={`Экскурсии: ${country.name}`}>
+	<TravelPageStyles />
+	<section class="page-hero">
+		{country.image_url && <img src={country.image_url} alt="" />}
+		<div class="page-hero__inner">
+			<p class="eyebrow">Страна</p>
+			<h1>{country.name}</h1>
+			<p class="page-lead">{countryLead}</p>
+		</div>
+	</section>
+
+	<section class="section">
+		{country.about_obj_phrase && <p class="prose">{country.about_obj_phrase}</p>}
+		<div class="section__heading">
+			<p class="eyebrow">Города</p>
+			<h2>Популярные города</h2>
+		</div>
+
+		{
+			popularCities.length > 0 ? (
+				<div class="country-city-grid">
+					{popularCities.map((city) => (
+						<a class="city-tile" href={cityHref(city)}>
+							<div class="city-tile__media">
+								{city.image_url && <img src={city.image_url} alt="" loading="lazy" />}
+							</div>
+							<div class="city-tile__body">
+								<h3>{city.name}</h3>
+								<p>
+									<span>{formatCount(city.experience_count)} экскурсий</span>
+									{city.guides_count > 0 && <span>{formatCount(city.guides_count)} гидов</span>}
+								</p>
+							</div>
+						</a>
+					))}
+				</div>
+			) : (
+				<div class="empty-card">Для этой страны пока нет городов.</div>
+			)
+		}
+
+		{
+			otherCities.length > 0 && (
+				<div class="city-list-wrap">
+					<h3>Остальные города</h3>
+					<ul class="city-list">
+						{otherCities.map((city) => (
+							<li>
+								<a href={cityHref(city)}>{city.name}</a>
+								<span>{formatCount(city.experience_count)}</span>
+							</li>
+						))}
+					</ul>
+				</div>
+			)
+		}
+	</section>
+
+	<section class="section">
+		<div class="section__heading">
+			<p class="eyebrow">Экскурсии</p>
+			<h2>Популярные экскурсии в стране</h2>
+		</div>
+		{
+			experiences.length > 0 ? (
+				<div class="grid">
+					{experiences.map((experience) => <ExperienceCard experience={experience} />)}
+				</div>
+			) : (
+				<div class="empty-card">Популярные экскурсии появятся после обновления данных.</div>
+			)
+		}
+	</section>
+
+	<section class="section">
+		<div class="section__heading">
+			<p class="eyebrow">Гиды</p>
+			<h2>Гиды в стране</h2>
+		</div>
+		{
+			guides.length > 0 ? (
+				<div class="guide-grid">
+					{guides.map((guide) => (
+						<article class="guide-card">
+							<div class="guide-card__avatar">
+								{guide.image_url && <img src={guide.image_url} alt="" loading="lazy" />}
+							</div>
+							<div>
+								<h3>{[guide.first_name, guide.last_name].filter(Boolean).join(" ") || "Гид"}</h3>
+								<p>
+									{guide.city_name ? `${guide.city_name} · ` : ""}
+									{guide.rating ? `★ ${guide.rating}` : "Гид"}
+									{guide.review_count ? ` · ${formatCount(guide.review_count)} отзывов` : ""}
+								</p>
+								{guide.description && <p class="guide-card__description">{guide.description}</p>}
+							</div>
+						</article>
+					))}
+				</div>
+			) : (
+				<div class="empty-card">Раздел гидов будет заполнен после синхронизации профилей.</div>
+			)
+		}
+	</section>
+
+	<section class="section">
+		<div class="section__heading">
+			<p class="eyebrow">Отзывы</p>
+			<h2>Отзывы путешественников</h2>
+		</div>
+		<div class="empty-card">Отзывы будут подключены отдельным блоком после согласования источника данных.</div>
+	</section>
+
+	<section class="section">
+		<div class="section__heading">
+			<p class="eyebrow">SEO</p>
+			<h2>{seoBlock?.h2 ?? "Заголовок"}</h2>
+		</div>
+		<div class="empty-card">{seoBlock?.body ?? "Текст"}</div>
+	</section>
+
+	<style>
+		.country-city-grid {
+			display: grid;
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+			gap: 16px;
+		}
+
+		.city-tile {
+			display: flex;
+			min-width: 0;
+			flex-direction: column;
+			overflow: hidden;
+			border-radius: 8px;
+			color: #1f2420;
+			background: #fff;
+			text-decoration: none;
+			box-shadow: 0 1px 0 rgba(31, 36, 32, 0.08);
+		}
+
+		.city-tile__media {
+			height: 128px;
+			background:
+				linear-gradient(135deg, rgba(49, 93, 99, 0.9), rgba(127, 103, 73, 0.9)),
+				#315d63;
+			overflow: hidden;
+		}
+
+		.city-tile__media img {
+			display: block;
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		.city-tile__body {
+			padding: 14px;
+		}
+
+		.city-tile h3,
+		.city-list-wrap h3,
+		.guide-card h3 {
+			margin: 0;
+			font-size: 1.02rem;
+			line-height: 1.25;
+		}
+
+		.city-tile p,
+		.guide-card p {
+			margin: 7px 0 0;
+			color: #687067;
+			font-size: 0.94rem;
+		}
+
+		.city-tile p {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px 10px;
+		}
+
+		.city-list-wrap {
+			margin-top: 28px;
+		}
+
+		.city-list {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+			gap: 10px 18px;
+			margin: 14px 0 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		.city-list li {
+			display: flex;
+			gap: 12px;
+			justify-content: space-between;
+			padding: 12px 0;
+			border-bottom: 1px solid rgba(31, 36, 32, 0.1);
+		}
+
+		.city-list a {
+			color: #1f2420;
+			font-weight: 750;
+			text-decoration: none;
+		}
+
+		.city-list span {
+			color: #687067;
+		}
+
+		.guide-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+			gap: 16px;
+		}
+
+		.guide-card {
+			display: grid;
+			grid-template-columns: 64px 1fr;
+			gap: 14px;
+			align-items: start;
+			padding: 16px;
+			border-radius: 8px;
+			background: #fff;
+			box-shadow: 0 1px 0 rgba(31, 36, 32, 0.08);
+		}
+
+		.guide-card__avatar {
+			width: 64px;
+			height: 64px;
+			overflow: hidden;
+			border-radius: 50%;
+			background: #d9ded6;
+		}
+
+		.guide-card__avatar img {
+			display: block;
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		.guide-card__description {
+			display: -webkit-box;
+			overflow: hidden;
+			-webkit-box-orient: vertical;
+			-webkit-line-clamp: 3;
+			line-height: 1.45;
+		}
+
+		@media (max-width: 1060px) {
+			.country-city-grid {
+				grid-template-columns: repeat(4, minmax(0, 1fr));
+			}
+		}
+
+		@media (max-width: 760px) {
+			.country-city-grid {
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+			}
+
+		}
+	</style>
+</Base>

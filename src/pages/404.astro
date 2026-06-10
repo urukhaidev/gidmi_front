@@ -1,0 +1,184 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Страница не найдена" description="Запрашиваемая страница не существует.">
+	<section class="not-found">
+		<div class="not-found__inner">
+			<span class="not-found__code">404</span>
+			<p class="eyebrow">Страница не найдена</p>
+			<h1>Кажется, вы свернули не туда</h1>
+			<p class="not-found__lead">
+				Страница, которую вы ищете, не существует, была перемещена или временно
+				недоступна. Попробуйте вернуться на главную или выберите направление.
+			</p>
+			<div class="not-found__actions">
+				<a class="not-found__btn not-found__btn--primary" href="/">На главную</a>
+				<a class="not-found__btn" href="/countries">Страны</a>
+				<a class="not-found__btn" href="/cities">Города</a>
+				<a class="not-found__btn" href="/excursions">Экскурсии</a>
+			</div>
+		</div>
+	</section>
+
+	<style>
+		:global(body) {
+			margin: 0;
+			color: #1f2420;
+			background: #fff;
+			font-family:
+				Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+				sans-serif;
+		}
+
+		:global(header) {
+			position: sticky;
+			top: 0;
+			z-index: 20;
+			border-bottom: 1px solid rgba(31, 36, 32, 0.1);
+			background: rgba(255, 255, 255, 0.94);
+			backdrop-filter: blur(14px);
+		}
+
+		:global(header nav) {
+			display: flex;
+			align-items: center;
+			gap: 18px;
+			max-width: 1200px;
+			margin: 0 auto;
+			padding: 14px 24px;
+		}
+
+		:global(header nav > a:first-child) {
+			margin-right: auto;
+			color: #1f2420;
+			font-weight: 850;
+			text-decoration: none;
+		}
+
+		:global(header nav a) {
+			color: #3f463f;
+			text-decoration: none;
+			font-weight: 700;
+		}
+
+		.not-found {
+			position: relative;
+			display: grid;
+			place-items: center;
+			min-height: calc(100vh - 200px);
+			min-height: calc(100dvh - 200px);
+			padding: 64px 24px;
+			text-align: center;
+			background:
+				linear-gradient(135deg, #315d63, #7f6749 58%, #25332e),
+				#315d63;
+			color: #fff;
+			overflow: hidden;
+		}
+
+		.not-found__inner {
+			position: relative;
+			z-index: 1;
+			max-width: 680px;
+		}
+
+		.not-found__code {
+			display: block;
+			margin-bottom: 24px;
+			font-size: clamp(6rem, 18vw, 12rem);
+			font-weight: 900;
+			line-height: 1;
+			letter-spacing: -0.04em;
+			color: rgba(255, 255, 255, 0.1);
+		}
+
+		.eyebrow {
+			margin: 0 0 12px;
+			color: #cfa464;
+			font-size: 0.78rem;
+			font-weight: 850;
+			letter-spacing: 0;
+			text-transform: uppercase;
+		}
+
+		h1 {
+			margin: 0;
+			font-size: clamp(2rem, 5vw, 3.4rem);
+			line-height: 1.05;
+			letter-spacing: 0;
+			text-wrap: pretty;
+		}
+
+		.not-found__lead {
+			max-width: 540px;
+			margin: 20px auto 0;
+			color: rgba(255, 255, 255, 0.78);
+			font-size: 1.1rem;
+			line-height: 1.65;
+			text-wrap: pretty;
+		}
+
+		.not-found__actions {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: center;
+			gap: 12px;
+			margin-top: 36px;
+		}
+
+		.not-found__btn {
+			display: inline-flex;
+			align-items: center;
+			height: 52px;
+			padding: 0 28px;
+			border: 1px solid rgba(255, 255, 255, 0.28);
+			border-radius: 8px;
+			color: #fff;
+			background: transparent;
+			font-size: 1rem;
+			font-weight: 800;
+			text-decoration: none;
+			transition: background 0.18s, border-color 0.18s;
+		}
+
+		.not-found__btn:hover {
+			background: rgba(255, 255, 255, 0.12);
+			border-color: rgba(255, 255, 255, 0.44);
+		}
+
+		.not-found__btn--primary {
+			color: #1f2420;
+			background: #fff;
+			border-color: #fff;
+		}
+
+		.not-found__btn--primary:hover {
+			background: rgba(255, 255, 255, 0.88);
+			border-color: rgba(255, 255, 255, 0.88);
+		}
+
+		@media (max-width: 760px) {
+			:global(header nav) {
+				align-items: flex-start;
+				flex-wrap: wrap;
+				padding: 14px 18px;
+			}
+
+			.not-found {
+				min-height: calc(100vh - 160px);
+				min-height: calc(100dvh - 160px);
+				padding: 48px 18px;
+			}
+
+			.not-found__actions {
+				flex-direction: column;
+				align-items: stretch;
+			}
+
+			.not-found__btn {
+				justify-content: center;
+			}
+		}
+	</style>
+</Base>

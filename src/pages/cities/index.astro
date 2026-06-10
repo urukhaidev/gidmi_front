@@ -1,0 +1,41 @@
+---
+import Base from "../../layouts/Base.astro";
+import PlaceCard from "../../components/PlaceCard.astro";
+import TravelPageStyles from "../../components/TravelPageStyles.astro";
+import SearchBox from "../../components/SearchBox.astro";
+import { cityHref, getCities } from "../../lib/travel-db.js";
+
+const { rows: cities, error } = await getCities(180);
+
+Astro.response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=60");
+---
+
+<Base title="Города" description="Города с экскурсиями и маршрутами.">
+	<TravelPageStyles />
+	<section class="page-hero">
+		{cities[0]?.image_url && <img src={cities[0].image_url} alt="" />}
+		<div class="page-hero__inner">
+			<p class="eyebrow">Города</p>
+			<h1>Города</h1>
+			<p class="page-lead">Найдите город и выберите экскурсию по рейтингу и отзывам.</p>
+			<SearchBox variant="inline" placeholder="Поиск города, страны или экскурсии" />
+		</div>
+	</section>
+
+	<section class="section">
+		{error && <div class="empty-card">{error}</div>}
+		<div class="grid">
+			{
+				cities.map((city) => (
+					<PlaceCard
+						href={cityHref(city)}
+						name={city.name}
+						count={city.experience_count}
+						secondaryCount={city.guides_count}
+						image={city.image_url}
+					/>
+				))
+			}
+		</div>
+	</section>
+</Base>

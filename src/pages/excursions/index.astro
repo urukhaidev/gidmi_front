@@ -1,0 +1,44 @@
+---
+import Base from "../../layouts/Base.astro";
+import ExperienceCard from "../../components/ExperienceCard.astro";
+import TravelPageStyles from "../../components/TravelPageStyles.astro";
+import { getExperiences } from "../../lib/travel-db.js";
+
+const { rows: experiences, error } = await getExperiences({ limit: 72 });
+
+Astro.response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=60");
+---
+
+<Base title="Экскурсии" description="Популярные экскурсии и маршруты по всему миру.">
+	<TravelPageStyles />
+	<section class="page-hero">
+		{experiences[0]?.image_url && <img src={experiences[0].image_url} alt="" />}
+		<div class="page-hero__inner">
+			<p class="eyebrow">Каталог</p>
+			<h1>Экскурсии</h1>
+			<p class="page-lead">
+				Популярные маршруты, обзорные прогулки, поездки с гидами и тематические
+				экскурсии.
+			</p>
+		</div>
+	</section>
+
+	<section class="section">
+		<div class="section__heading">
+			<p class="eyebrow">Популярное</p>
+			<h2>Лучшие предложения</h2>
+		</div>
+		{error && <div class="empty-card">{error}</div>}
+		<div class="grid">
+			{
+				experiences.length > 0 ? (
+					experiences.map((experience) => (
+						<ExperienceCard experience={experience} />
+					))
+				) : (
+					<div class="empty-card">Экскурсии не найдены.</div>
+				)
+			}
+		</div>
+	</section>
+</Base>

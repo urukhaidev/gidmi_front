@@ -1,0 +1,390 @@
+---
+import Base from "../../../../layouts/Base.astro";
+import ExperienceCard from "../../../../components/ExperienceCard.astro";
+import ReviewList from "../../../../components/ReviewList.astro";
+import TravelPageStyles from "../../../../components/TravelPageStyles.astro";
+import {
+	cityHref,
+	countryHref,
+	cityCategoryHref,
+	getCity,
+	getExperience,
+	getExperiencePhotos,
+	getExperiences,
+	getExperienceTags,
+	getReviews,
+	experienceHref,
+} from "../../../../lib/travel-db.js";
+
+const { id: paramId } = Astro.params;
+const id = paramId ? paramId.split("-")[0] : "";
+
+const [
+	experienceResult,
+	photosResult,
+	tagsResult,
+	reviewsResult,
+] = await Promise.all([
+	getExperience(id),
+	getExperiencePhotos(id),
+	getExperienceTags(id),
+	getReviews({ experienceId: id, limit: 8 }),
+]);
+const experience = experienceResult.rows[0];
+
+if (!experience) {
+	return Astro.redirect("/404");
+}
+
+const canonicalPath = experienceHref(experience);
+if (Astro.url.pathname !== canonicalPath) {
+	return Astro.redirect(`${canonicalPath}${Astro.url.search}`, 301);
+}
+
+const searchCityResult = experience.city_id
+	? await getCity(experience.city_id)
+	: { rows: [] };
+const searchCity = searchCityResult.rows[0] ?? null;
+
+const relatedResult = await getExperiences({
+	limit: 6,
+	cityId: experience.city_id,
+});
+const related = relatedResult.rows.filter((item) => item.id !== experience.id);
+const photos = photosResult.rows.filter((item) => item.image_url);
+const tags = tagsResult.rows;
+const reviews = reviewsResult.rows;
+const heroImage = experience.image_url ?? photos[0]?.image_url;
+const additionalPhotos = photos.filter((photo) => photo.image_url !== heroImage);
+const galleryPhotos = additionalPhotos.length > 0 ? additionalPhotos : photos;
+const countryUrl = experience.country_name
+	? countryHref({ id: experience.country_id, slug: experience.country_slug, url: experience.country_url })
+	: null;
+const cityUrl = experience.city_name
+	? cityHref({
+		id: experience.city_id,
+		slug: experience.city_slug,
+		country_slug: experience.country_slug,
+		country_url: experience.country_url,
+	})
+	: null;
+const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
+const cleanText = (value: string | null | undefined) =>
+	String(value ?? "")
+		.replace(/<[^>]*>/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+const description =
+	experience.annotation ??
+	experience.tagline ??
+	(cleanText(experience.description_new_html || experience.description_html) || "Экскурсия с гидом.");
+const bookingUrl = `https://experience.tripster.ru/mfs/experience/booking/${experience.id}/`;
+
+Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=120");
+---
+
+<Base title={experience.title} description={description} image={heroImage} searchCity={searchCity ?? undefined}>
+	<TravelPageStyles />
+	<section class="page-hero">
+		{heroImage && <img src={heroImage} alt="" />}
+		<div class="page-hero__inner">
+			<nav class="breadcrumbs" aria-label="Хлебные крошки">
+				<a href="/">Гидми</a>
+				{countryUrl && <span>/</span>}
+				{countryUrl && <a href={countryUrl}>{experience.country_name}</a>}
+				{cityUrl && <span>/</span>}
+				{cityUrl && <a href={cityUrl}>{experience.city_name}</a>}
+				<span>/</span>
+				<span>{experience.title}</span>
+			</nav>
+			<p class="eyebrow">Экскурсия</p>
+			<h1>{experience.title}</h1>
+			{experience.tagline && <p class="page-lead">{experience.tagline}</p>}
+		</div>
+	</section>
+
+	<section class="section media-layout">
+		{
+			galleryPhotos.length > 0 ? (
+				<div class="photo-grid">
+					{galleryPhotos.slice(0, 6).map((photo) => (
+						<img src={photo.image_url} alt="" loading="lazy" />
+					))}
+				</div>
+			) : (
+				<div></div>
+			)
+		}
+		<aside class="booking-aside">
+			<div class="side-card">
+				{experience.price_value_string && <strong>{experience.price_value_string}</strong>}
+				{experience.city_name && cityUrl && <a href={cityUrl}>{experience.city_name}</a>}
+				{experience.country_name && countryUrl && <a href={countryUrl}>{experience.country_name}</a>}
+				<a class="button" href={bookingUrl} target="_blank" rel="noopener">Выбрать дату</a>
+			</div>
+		</aside>
+	</section>
+
+	<section class="section detail-layout">
+		<article>
+			<div class="stats">
+				{experience.rating && <span><span class="stat-icon" aria-hidden="true">★</span>{experience.rating}</span>}
+				{experience.review_count && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H8.8L5 18.8V5Zm3 4v1.8h8V9H8Zm0 3.4v1.8h6v-1.8H8Z" /></svg></span>{formatCount(experience.review_count)} отзывов</span>}
+				{experience.duration && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 3h2v2.1a8 8 0 1 1-2 0V3Zm1 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Zm1-10v4.2l3 1.8-1 1.6-4-2.4V11h2Z" /></svg></span>{experience.duration} ч.</span>}
+				{experience.max_persons && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.5 12a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7 0a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM2 20c.4-3.5 3-6 6.5-6s6.1 2.5 6.5 6H2Zm12.6-5.7c.4-.2.9-.3 1.4-.3 3 0 5.2 2.1 5.6 5H17c-.3-1.8-1.1-3.4-2.4-4.7Z" /></svg></span>до {experience.max_persons} человек</span>}
+			</div>
+
+			{
+				(experience.description_new_html || experience.description_html) ? (
+					<div class="prose" set:html={experience.description_new_html || experience.description_html} />
+				) : (
+					description && <p class="prose">{description}</p>
+				)
+			}
+
+			<div class="info-grid">
+				{experience.meeting_point_text && <div><strong>Место встречи</strong><p>{experience.meeting_point_text}</p></div>}
+				{experience.finish_point_text && <div><strong>Финиш</strong><p>{experience.finish_point_text}</p></div>}
+				{experience.schedule_text && <div><strong>Расписание</strong><p>{experience.schedule_text}</p></div>}
+				{experience.additional_info && <div><strong>Дополнительно</strong><p>{experience.additional_info}</p></div>}
+				{experience.price_included_description && <div><strong>Включено</strong><p>{experience.price_included_description}</p></div>}
+				{experience.price_not_included_description && <div><strong>Не включено</strong><p>{experience.price_not_included_description}</p></div>}
+			</div>
+		</article>
+
+		<aside>
+			{
+				tags.length > 0 && (
+					<div class="side-card">
+						<h2>Категории</h2>
+						<ul class="pill-list">
+							{tags.map((tag) => (
+								<li><a href={cityCategoryHref({
+									id: tag.city_id,
+									slug: tag.city_slug,
+									country_slug: tag.country_slug,
+									country_url: tag.country_url,
+								}, tag)}>{tag.name}</a></li>
+							))}
+						</ul>
+					</div>
+				)
+			}
+		</aside>
+	</section>
+
+	<section class="section">
+		<div class="section__heading">
+			<p class="eyebrow">Отзывы</p>
+			<h2>Отзывы путешественников</h2>
+		</div>
+		<ReviewList
+			reviews={reviews}
+			emptyText="Отзывы об этой экскурсии появятся после обновления данных."
+		/>
+	</section>
+
+	{
+		related.length > 0 && (
+			<section class="section">
+				<div class="section__heading">
+					<p class="eyebrow">Похожие</p>
+					<h2>Еще экскурсии рядом</h2>
+				</div>
+				<div class="grid">
+					{related.map((item) => <ExperienceCard experience={item} />)}
+				</div>
+			</section>
+		)
+	}
+
+	<style>
+		.detail-layout {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) 320px;
+			gap: 28px;
+			align-items: start;
+			padding-top: 24px;
+		}
+
+		.detail-layout aside {
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		.detail-layout article {
+			grid-column: 1;
+			grid-row: 1;
+		}
+
+		.stats {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin-bottom: 18px;
+		}
+
+		.stats > span,
+		.side-card {
+			border: 1px solid rgba(31, 36, 32, 0.12);
+			border-radius: 8px;
+			background: #fff;
+		}
+
+		.stats > span {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			min-height: 38px;
+			padding: 0 12px;
+			color: #3f463f;
+			font-size: 0.96rem;
+			font-weight: 750;
+		}
+
+		.stats .stat-icon {
+			display: inline-grid;
+			place-items: center;
+			width: 18px;
+			height: 18px;
+			padding: 0;
+			border: 0;
+			color: #c28b2c;
+			background: transparent;
+			font-size: 1rem;
+			line-height: 1;
+			flex: 0 0 auto;
+		}
+
+		.stats .stat-icon svg {
+			width: 18px;
+			height: 18px;
+			fill: currentColor;
+		}
+
+		.media-layout {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) 320px;
+			gap: 28px;
+			align-items: start;
+			padding-top: 24px;
+			padding-bottom: 0;
+		}
+
+		.media-layout .photo-grid {
+			grid-column: 1;
+			grid-row: 1;
+		}
+
+		.media-layout .booking-aside {
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		.photo-grid {
+			display: grid;
+			grid-template-columns: repeat(6, minmax(0, 1fr));
+			gap: 10px;
+		}
+
+		.photo-grid img {
+			width: 100%;
+			aspect-ratio: 16 / 9;
+			object-fit: cover;
+			border-radius: 8px;
+		}
+
+		.photo-grid img:first-child {
+			grid-column: span 2;
+			max-height: 190px;
+		}
+
+		.info-grid {
+			display: grid;
+			gap: 14px;
+			margin-top: 28px;
+		}
+
+		.info-grid div,
+		.side-card {
+			padding: 20px;
+		}
+
+		.info-grid div {
+			border-radius: 8px;
+			background: #fff;
+		}
+
+		.info-grid p,
+		.side-card p {
+			margin: 8px 0 0;
+			color: #555d54;
+			line-height: 1.55;
+		}
+
+		.side-card {
+			display: grid;
+			gap: 12px;
+			margin-bottom: 16px;
+			box-shadow: 0 12px 34px rgba(31, 36, 32, 0.08);
+		}
+
+		.booking-aside .side-card {
+			margin-bottom: 0;
+		}
+
+		.side-card strong {
+			font-size: 1.35rem;
+		}
+
+		.side-card a {
+			color: #1f2420;
+			font-weight: 800;
+			text-decoration: none;
+		}
+
+		.button {
+			display: inline-flex;
+			justify-content: center;
+			padding: 13px 16px;
+			border-radius: 6px;
+			color: #fff !important;
+			background: #1f2420;
+		}
+
+		.side-card h2 {
+			margin: 0;
+			font-size: 1.2rem;
+		}
+
+		@media (max-width: 860px) {
+			.media-layout,
+			.detail-layout {
+				grid-template-columns: 1fr;
+				padding-top: 22px;
+			}
+
+			.media-layout .booking-aside,
+			.detail-layout aside,
+			.detail-layout article {
+				grid-column: auto;
+				grid-row: auto;
+			}
+
+			.photo-grid {
+				display: flex;
+				overflow-x: auto;
+				gap: 10px;
+				padding-bottom: 4px;
+				scroll-snap-type: x proximity;
+			}
+
+			.photo-grid img,
+			.photo-grid img:first-child {
+				flex: 0 0 min(78vw, 320px);
+				aspect-ratio: 4 / 3;
+				scroll-snap-align: start;
+			}
+		}
+	</style>
+</Base>

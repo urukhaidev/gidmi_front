@@ -1,0 +1,488 @@
+---
+import Base from "../../../../layouts/Base.astro";
+import ExperienceCard from "../../../../components/ExperienceCard.astro";
+import ExcursionFilterBar from "../../../../components/ExcursionFilterBar.astro";
+import ReviewList from "../../../../components/ReviewList.astro";
+import TravelPageStyles from "../../../../components/TravelPageStyles.astro";
+import {
+	cityCategoryHref,
+	cityHref,
+	countryHref,
+	getCity,
+	getCityTag,
+	getCityTags,
+	getExperiences,
+	getReviews,
+	getSeoBlock,
+} from "../../../../lib/travel-db.js";
+
+const { id, tagId } = Astro.params;
+
+const cityResult = await getCity(id);
+const city = cityResult.rows[0];
+
+if (!city) {
+	return Astro.redirect("/404");
+}
+
+const tagResult = await getCityTag(city.id, tagId);
+const tag = tagResult.rows[0];
+
+if (!tag) {
+	return Astro.redirect("/404");
+}
+
+const preferredPath = cityCategoryHref(city, tag);
+const isRootRewrite = Astro.url.searchParams.get("__root") === "1";
+if (!isRootRewrite && Astro.url.pathname !== preferredPath) {
+	return Astro.redirect(`${preferredPath}${Astro.url.search}`);
+}
+
+const sortParam = Astro.url.searchParams.get("sort") ?? "popular";
+const allowedSorts = ["popular", "rating", "price_asc", "price_desc"];
+const currentSort = allowedSorts.includes(sortParam)
+	? sortParam
+	: "popular";
+const currentPersons = Astro.url.searchParams.get("persons") ?? "1";
+const currentFormat = Astro.url.searchParams.get("format") ?? "any";
+const currentMovement = Astro.url.searchParams.get("movement") ?? "any";
+const currentPrice = Astro.url.searchParams.get("price") ?? "any";
+const filterState = {
+	sort: currentSort,
+	persons: currentPersons,
+	format: currentFormat,
+	movement: currentMovement,
+	price: currentPrice,
+};
+
+const [tagsResult, experiencesResult, reviewsResult, seoResult] = await Promise.all([
+	getCityTags(city.id, 80),
+	getExperiences({ limit: 48, cityId: city.id, cityTagId: tag.id, ...filterState }),
+	getReviews({ limit: 9, cityId: city.id, cityTagId: tag.id }),
+	getSeoBlock("city_category", tag.id),
+]);
+
+const rawTags = tagsResult.rows.filter((tag) => tag.name.toLowerCase() !== "все" && tag.slug !== "all" && tag.slug !== "vse");
+const flatTagsLimit = rawTags.slice(0, 19);
+
+const tagsByCategory = rawTags.reduce((groups, tag) => {
+	const groupName = tag.category || tag.tag_category || "Категории";
+	const group = groups.get(groupName) ?? [];
+	group.push(tag);
+	groups.set(groupName, group);
+	return groups;
+}, new Map<string, any[]>());
+const experiences = experiencesResult.rows;
+const reviews = reviewsResult.rows;
+const seoBlock = seoResult.rows[0];
+const country = city.country_id
+	? { id: city.country_id, slug: city.country_slug, url: city.country_url }
+	: null;
+const cityPhrase = city.in_obj_phrase || `в ${city.name}`;
+const categoryName = tag.name.charAt(0).toLowerCase() + tag.name.slice(1);
+const title = `Экскурсии ${categoryName} ${cityPhrase}`;
+const description = `${title}: экскурсии, маршруты и гиды на Гидми.`;
+const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
+
+Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=120");
+---
+
+<Base title={title} description={description} searchCity={city}>
+	<TravelPageStyles />
+	<section class="page-hero">
+		{(tag.image_url || city.image_url) && <img src={tag.image_url || city.image_url} alt="" />}
+		<div class="page-hero__inner">
+			<nav class="breadcrumbs" aria-label="Хлебные крошки">
+				<a href="/">Гидми</a>
+				{
+					country && city.country_name && (
+						<>
+							<span>/</span>
+							<a href={countryHref(country)}>{city.country_name}</a>
+						</>
+					)
+				}
+				<span>/</span>
+				<a href={cityHref(city)}>{city.name}</a>
+				<span>/</span>
+				<span>{tag.name}</span>
+			</nav>
+			<p class="eyebrow">Категория в городе</p>
+			<h1>{title}</h1>
+			<p class="page-lead">
+				{formatCount(tag.experience_count)} экскурсий в категории «{tag.name}».
+			</p>
+		</div>
+	</section>
+
+	<section class="section category-section">
+		<div class="category-panel">
+			<div class="category-panel__label">Категории {city.name}</div>
+			<div class="category-filter-list">
+				<a class="category-filter" href={cityHref(city)}>
+					<span>Все экскурсии</span>
+					<small>{formatCount(city.experience_count)}</small>
+				</a>
+				{
+					flatTagsLimit.map((item) => (
+						<a
+							class:list={[
+								"category-filter",
+								item.id === tag.id && "category-filter--active",
+							]}
+							href={cityCategoryHref(city, item)}
+						>
+							<span>{item.name}</span>
+							<small>{formatCount(item.experience_count)}</small>
+						</a>
+					))
+				}
+				{rawTags.length > 19 && (
+					<button class="category-filter category-filter--more" data-more-categories-trigger>
+						Еще категории <span>▾</span>
+					</button>
+				)}
+			</div>
+
+			{rawTags.length > 19 && (
+				<div class="category-modal" id="categoryModal" aria-hidden="true" role="dialog">
+					<div class="category-modal__backdrop" data-close-modal></div>
+					<div class="category-modal__container">
+						<div class="category-modal__header">
+							<h2>Все категории экскурсий в {city.in_obj_phrase || city.name}</h2>
+							<button class="category-modal__close" data-close-modal aria-label="Закрыть">✕</button>
+						</div>
+						<div class="category-modal__body">
+							{Array.from(tagsByCategory.entries()).map(([groupName, groupTags]) => (
+								<div class="category-group">
+									<h3>{groupName}</h3>
+									<div class="category-filter-list">
+										{groupTags.map((t: any) => (
+											<a
+												class:list={[
+													"category-filter",
+													t.id === tag.id && "category-filter--active",
+												]}
+												href={cityCategoryHref(city, t)}
+											>
+												<span>{t.name}</span>
+												<small>{formatCount(t.experience_count)}</small>
+											</a>
+										))}
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
+				</div>
+			)}
+		</div>
+	</section>
+
+	<section class="section" data-excursion-results>
+		<div class="section__heading">
+			<p class="eyebrow">Экскурсии</p>
+			<h2>{title}</h2>
+		</div>
+		<ExcursionFilterBar preferredPath={preferredPath} state={filterState} />
+		{
+			experiences.length > 0 ? (
+				<div class="grid">
+					{experiences.map((experience) => <ExperienceCard experience={experience} />)}
+				</div>
+			) : (
+				<div class="empty-card">В этой категории пока нет опубликованных экскурсий.</div>
+			)
+		}
+	</section>
+
+	<section class="section">
+		<div class="section__heading">
+			<p class="eyebrow">Отзывы</p>
+			<h2>Отзывы путешественников</h2>
+		</div>
+		<ReviewList
+			reviews={reviews}
+			showExperience
+			emptyText="Отзывы по экскурсиям этой категории появятся после обновления данных."
+		/>
+	</section>
+
+	<section class="section">
+		<div class="section__heading">
+			<p class="eyebrow">SEO</p>
+			<h2>{seoBlock?.h2 ?? "Заголовок"}</h2>
+		</div>
+		<div class="empty-card">{seoBlock?.body ?? "Текст"}</div>
+	</section>
+
+	<script is:inline>
+		(() => {
+			const setupModalToggles = () => {
+				const trigger = document.querySelector('[data-more-categories-trigger]');
+				const modal = document.getElementById('categoryModal');
+				if (!trigger || !modal) return;
+
+				const openModal = () => {
+					modal.removeAttribute('aria-hidden');
+					document.body.style.overflow = 'hidden';
+				};
+
+				const closeModal = () => {
+					modal.setAttribute('aria-hidden', 'true');
+					document.body.style.overflow = '';
+				};
+
+				trigger.addEventListener('click', openModal);
+
+				modal.querySelectorAll('[data-close-modal]').forEach(el => {
+					el.addEventListener('click', closeModal);
+				});
+
+				document.addEventListener('keydown', (e) => {
+					if (e.key === 'Escape' && !modal.hasAttribute('aria-hidden')) {
+						closeModal();
+					}
+				});
+			};
+
+			if (document.readyState === "loading") {
+				document.addEventListener("DOMContentLoaded", setupModalToggles, { once: true });
+			} else {
+				setupModalToggles();
+			}
+		})();
+	</script>
+
+	<style>
+		.category-panel {
+			display: grid;
+			gap: 12px;
+		}
+
+		.category-panel__label {
+			font-size: 1.18rem;
+			font-weight: 800;
+			color: #1f2420;
+			margin-bottom: 6px;
+		}
+
+		/* Modal styles */
+		.category-modal {
+			position: fixed;
+			inset: 0;
+			z-index: 1000;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 24px;
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 0.25s ease;
+		}
+
+		.category-modal:not([aria-hidden="true"]) {
+			opacity: 1;
+			pointer-events: auto;
+		}
+
+		.category-modal__backdrop {
+			position: absolute;
+			inset: 0;
+			background: rgba(12, 18, 16, 0.6);
+			backdrop-filter: blur(8px);
+		}
+
+		.category-modal__container {
+			position: relative;
+			z-index: 1;
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+			max-width: 820px;
+			max-height: 85vh;
+			border-radius: 12px;
+			background: #fff;
+			box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+			overflow: hidden;
+			animation: modal-slide 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+		}
+
+		@keyframes modal-slide {
+			from {
+				transform: translateY(20px) scale(0.97);
+			}
+			to {
+				transform: translateY(0) scale(1);
+			}
+		}
+
+		.category-modal__header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 20px 24px;
+			border-bottom: 1px solid rgba(31, 36, 32, 0.1);
+		}
+
+		.category-modal__header h2 {
+			margin: 0;
+			font-size: 1.35rem;
+			font-weight: 850;
+			color: #1f2420;
+		}
+
+		.category-modal__close {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 36px;
+			height: 36px;
+			border: 0;
+			border-radius: 50%;
+			color: #555d54;
+			background: #ece8dd;
+			font-size: 1rem;
+			font-weight: bold;
+			cursor: pointer;
+			transition: all 0.15s;
+		}
+
+		.category-modal__close:hover {
+			color: #fff;
+			background: #315d63;
+		}
+
+		.category-modal__body {
+			flex: 1;
+			overflow-y: auto;
+			padding: 24px;
+			display: grid;
+			gap: 24px;
+		}
+
+		.category-filter--more {
+			border-color: #315d63;
+			color: #315d63;
+			background: rgba(49, 93, 99, 0.05);
+			cursor: pointer;
+		}
+
+		.category-filter--more:hover {
+			color: #fff;
+			background: #315d63;
+		}
+
+		.category-filter-list {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 7px;
+		}
+
+		.category-section {
+			padding-top: 30px;
+			padding-bottom: 28px;
+		}
+
+		.category-filter {
+			display: inline-flex;
+			gap: 7px;
+			align-items: center;
+			min-height: 32px;
+			padding: 5px 9px;
+			border: 1px solid rgba(31, 36, 32, 0.12);
+			border-radius: 999px;
+			color: #1f2420;
+			background: #fff;
+			text-decoration: none;
+			font-weight: 800;
+			font-size: 0.92rem;
+		}
+
+		.category-filter small {
+			color: #687067;
+			font-size: 0.86rem;
+			font-weight: 750;
+		}
+
+		.category-filter--active {
+			border-color: #315d63;
+			background: #315d63;
+			color: #fff;
+		}
+
+		.category-filter--active small {
+			color: rgba(255, 255, 255, 0.78);
+		}
+
+		.section__heading--row {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) auto;
+			gap: 8px 16px;
+			align-items: end;
+		}
+
+		.section__heading--row .eyebrow {
+			grid-column: 1 / -1;
+		}
+
+		.sort-menu {
+			position: relative;
+			justify-self: end;
+		}
+
+		.sort-menu summary {
+			display: inline-flex;
+			gap: 8px;
+			align-items: center;
+			min-height: 34px;
+			padding: 4px 0;
+			color: #1f2420;
+			cursor: pointer;
+			font-size: 1.05rem;
+			font-weight: 750;
+			list-style: none;
+		}
+
+		.sort-menu summary::-webkit-details-marker {
+			display: none;
+		}
+
+		.sort-menu__list {
+			position: absolute;
+			top: calc(100% + 6px);
+			right: 0;
+			z-index: 5;
+			display: grid;
+			min-width: 168px;
+			padding: 6px;
+			border: 1px solid rgba(31, 36, 32, 0.12);
+			border-radius: 8px;
+			background: #fff;
+			box-shadow: 0 12px 28px rgba(31, 36, 32, 0.12);
+		}
+
+		.sort-menu__link {
+			padding: 8px 10px;
+			border-radius: 6px;
+			color: #3f463f;
+			text-decoration: none;
+			font-weight: 750;
+		}
+
+		.sort-menu__link--active {
+			color: #fff;
+			background: #315d63;
+		}
+
+		@media (max-width: 760px) {
+			.section__heading--row {
+				grid-template-columns: 1fr;
+			}
+
+			.sort-menu {
+				justify-self: start;
+			}
+		}
+	</style>
+</Base>

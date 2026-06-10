@@ -1,0 +1,158 @@
+---
+import { experienceHref, type ReviewRow } from "../lib/travel-db.js";
+
+interface Props {
+	reviews: ReviewRow[];
+	emptyText?: string;
+	showExperience?: boolean;
+}
+
+const {
+	reviews,
+	emptyText = "Отзывы появятся после обновления данных.",
+	showExperience = false,
+} = Astro.props;
+
+const formatDate = (value: string | null | undefined) => {
+	if (!value) return null;
+
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return null;
+
+	return new Intl.DateTimeFormat("ru-RU", {
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+	}).format(date);
+};
+
+const reviewTitle = (review: ReviewRow) =>
+	review.experience_title || review.title || "Экскурсия";
+---
+
+{
+	reviews.length > 0 ? (
+		<div class="review-grid">
+			{reviews.map((review) => (
+				<article class="review-card">
+					<div class="review-card__header">
+						<div class="review-card__avatar" aria-hidden="true">
+							{review.avatar_url ? (
+								<img src={review.avatar_url} alt="" loading="lazy" />
+							) : (
+								<span>{(review.author_name || "Г").slice(0, 1)}</span>
+							)}
+						</div>
+						<div>
+							<h3>{review.author_name || "Путешественник"}</h3>
+							<p>
+								{review.rating && <span>★ {review.rating}</span>}
+								{formatDate(review.created_on) && <span>{formatDate(review.created_on)}</span>}
+							</p>
+						</div>
+					</div>
+					<p class="review-card__text">{review.text}</p>
+					{showExperience && (
+						<a
+							class="review-card__link"
+							href={experienceHref({
+								id: review.experience_id,
+								title: reviewTitle(review),
+								city_slug: review.city_slug,
+								country_slug: review.country_slug,
+								country_url: review.country_url,
+							})}
+						>
+							{reviewTitle(review)}
+						</a>
+					)}
+				</article>
+			))}
+		</div>
+	) : (
+		<div class="empty-card">{emptyText}</div>
+	)
+}
+
+<style>
+	.review-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		gap: 16px;
+	}
+
+	.review-card {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 14px;
+		padding: 18px;
+		border: 1px solid rgba(31, 36, 32, 0.1);
+		border-radius: 8px;
+		background: #fff;
+		box-shadow: 0 1px 0 rgba(31, 36, 32, 0.08);
+	}
+
+	.review-card__header {
+		display: grid;
+		grid-template-columns: 48px minmax(0, 1fr);
+		gap: 12px;
+		align-items: center;
+	}
+
+	.review-card__avatar {
+		display: grid;
+		place-items: center;
+		width: 48px;
+		height: 48px;
+		overflow: hidden;
+		border-radius: 50%;
+		background: #ece8dd;
+		color: #315d63;
+		font-weight: 850;
+	}
+
+	.review-card__avatar img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	.review-card h3 {
+		margin: 0;
+		font-size: 1rem;
+		line-height: 1.25;
+	}
+
+	.review-card__header p {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 10px;
+		margin: 5px 0 0;
+		color: #687067;
+		font-size: 0.9rem;
+	}
+
+	.review-card__text {
+		display: -webkit-box;
+		overflow: hidden;
+		margin: 0;
+		color: #3f463f;
+		line-height: 1.58;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 6;
+	}
+
+	.review-card__link {
+		margin-top: auto;
+		color: #315d63;
+		font-weight: 800;
+		line-height: 1.35;
+		text-decoration: none;
+	}
+
+	.review-card__link:hover {
+		color: #264d52;
+	}
+</style>

@@ -1,0 +1,205 @@
+---
+const { preferredPath, state } = Astro.props;
+
+const sortOptions = [
+	{ value: "popular", label: "Популярные" },
+	{ value: "rating", label: "По оценкам" },
+	{ value: "price_asc", label: "Подешевле" },
+	{ value: "price_desc", label: "Подороже" },
+];
+
+const formatOptions = [
+	{ value: "any", label: "Любой формат" },
+	{ value: "experience", label: "Экскурсия" },
+	{ value: "waterwalk", label: "Водная прогулка" },
+	{ value: "quest", label: "Квест" },
+	{ value: "photosession", label: "Фотосессия" },
+	{ value: "activity", label: "Активность" },
+	{ value: "master_class", label: "Мастер-класс" },
+	{ value: "audioguide", label: "Аудиогид" },
+	{ value: "ticket", label: "Билет" },
+];
+
+const movementOptions = [
+	{ value: "any", label: "Любой способ" },
+	{ value: "foot", label: "Пешком" },
+	{ value: "car", label: "На машине" },
+	{ value: "bus", label: "На автобусе" },
+	{ value: "museum", label: "В музее" },
+	{ value: "motorship", label: "На теплоходе" },
+	{ value: "speedboat", label: "На катере" },
+	{ value: "bicycle", label: "На велосипеде" },
+	{ value: "other", label: "Другое" },
+];
+
+const priceOptions = [
+	{ value: "any", label: "Любая цена" },
+	{ value: "low", label: "До 2 000 ₽" },
+	{ value: "mid", label: "2 000-5 000 ₽" },
+	{ value: "high", label: "От 5 000 ₽" },
+];
+
+const personOptions = [1, 2, 3, 4, 5, 6, 7, 8].map((value) => ({
+	value: String(value),
+	label: `${value} чел.`,
+}));
+
+const current = {
+	sort: state?.sort ?? "popular",
+	persons: state?.persons ?? "1",
+	format: state?.format ?? "any",
+	movement: state?.movement ?? "any",
+	price: state?.price ?? "any",
+};
+
+const selectedLabel = (options: { value: string; label: string }[], value: string) =>
+	options.find((item) => item.value === value)?.label ?? options[0]?.label;
+
+const hrefFor = (updates: Record<string, string>) => {
+	const params = new URLSearchParams(Astro.url.searchParams);
+	params.delete("__root");
+
+	for (const [key, value] of Object.entries(updates)) {
+		if (!value || value === "any" || (key === "sort" && value === "popular") || (key === "persons" && value === "1")) {
+			params.delete(key);
+		} else {
+			params.set(key, String(value));
+		}
+	}
+
+	const query = params.toString();
+	return query ? `${preferredPath}?${query}` : preferredPath;
+};
+---
+
+<div class="excursion-filter-bar" data-excursion-filters>
+	<details class="filter-menu">
+		<summary>Любые даты, {current.persons} чел. <span aria-hidden="true">▾</span></summary>
+		<div class="filter-menu__list">
+			<span class="filter-menu__note">Дата: любые</span>
+			{personOptions.map((option) => (
+				<a
+					data-filter-link
+					class:list={["filter-menu__link", option.value === current.persons && "filter-menu__link--active"]}
+					href={hrefFor({ persons: option.value })}
+				>
+					{option.label}
+				</a>
+			))}
+		</div>
+	</details>
+
+	<details class="filter-menu">
+		<summary>{selectedLabel(formatOptions, current.format)} <span aria-hidden="true">▾</span></summary>
+		<div class="filter-menu__list">
+			{formatOptions.map((option) => (
+				<a
+					data-filter-link
+					class:list={["filter-menu__link", option.value === current.format && "filter-menu__link--active"]}
+					href={hrefFor({ format: option.value })}
+				>
+					{option.label}
+				</a>
+			))}
+		</div>
+	</details>
+
+	<details class="filter-menu">
+		<summary>{selectedLabel(movementOptions, current.movement)} <span aria-hidden="true">▾</span></summary>
+		<div class="filter-menu__list">
+			{movementOptions.map((option) => (
+				<a
+					data-filter-link
+					class:list={["filter-menu__link", option.value === current.movement && "filter-menu__link--active"]}
+					href={hrefFor({ movement: option.value })}
+				>
+					{option.label}
+				</a>
+			))}
+		</div>
+	</details>
+
+	<details class="filter-menu">
+		<summary>{selectedLabel(priceOptions, current.price)} <span aria-hidden="true">▾</span></summary>
+		<div class="filter-menu__list">
+			{priceOptions.map((option) => (
+				<a
+					data-filter-link
+					class:list={["filter-menu__link", option.value === current.price && "filter-menu__link--active"]}
+					href={hrefFor({ price: option.value })}
+				>
+					{option.label}
+				</a>
+			))}
+		</div>
+	</details>
+
+	<details class="filter-menu">
+		<summary>↕ {selectedLabel(sortOptions, current.sort)} <span aria-hidden="true">▾</span></summary>
+		<div class="filter-menu__list">
+			{sortOptions.map((option) => (
+				<a
+					data-filter-link
+					class:list={["filter-menu__link", option.value === current.sort && "filter-menu__link--active"]}
+					href={hrefFor({ sort: option.value })}
+				>
+					{option.label}
+				</a>
+			))}
+		</div>
+	</details>
+</div>
+
+<script is:inline>
+	(() => {
+		if (window.__gidmiExcursionFilters) return;
+		window.__gidmiExcursionFilters = true;
+
+		const resultsSelector = "[data-excursion-results]";
+
+		async function replaceResults(url, shouldPush = true) {
+			const current = document.querySelector(resultsSelector);
+			if (!current) {
+				window.location.href = url.toString();
+				return;
+			}
+
+			current.setAttribute("aria-busy", "true");
+
+			try {
+				const response = await fetch(url, {
+					headers: { "X-Requested-With": "fetch" },
+				});
+				if (!response.ok) throw new Error("Request failed");
+
+				const html = await response.text();
+				const nextDocument = new DOMParser().parseFromString(html, "text/html");
+				const next = nextDocument.querySelector(resultsSelector);
+				if (!next) throw new Error("Results block missing");
+
+				const nextTitle = nextDocument.querySelector("title")?.textContent;
+				current.replaceWith(next);
+				if (nextTitle) document.title = nextTitle;
+				if (shouldPush) history.pushState({}, "", url);
+			} catch {
+				window.location.href = url.toString();
+			}
+		}
+
+		document.addEventListener("click", (event) => {
+			const link = event.target.closest("a[data-filter-link]");
+			if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+			event.preventDefault();
+			const url = new URL(link.href);
+			document.querySelectorAll(".filter-menu[open]").forEach((item) => {
+				item.open = false;
+			});
+			replaceResults(url);
+		});
+
+		window.addEventListener("popstate", () => {
+			replaceResults(new URL(window.location.href), false);
+		});
+	})();
+</script>

@@ -1,0 +1,132 @@
+---
+import { experienceHref, type ExperienceRow } from "../lib/travel-db.js";
+
+const { experience } = Astro.props;
+
+const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
+const formatPrice = (item: ExperienceRow) => {
+	if (item.price_value_string) return item.price_value_string;
+	if (!item.price_value) return null;
+
+	const price = Number(item.price_value);
+	const currency = String(item.price_currency ?? "RUB").trim() || "RUB";
+
+	if (Number.isNaN(price)) return null;
+
+	try {
+		return new Intl.NumberFormat("ru-RU", {
+			style: "currency",
+			currency,
+			maximumFractionDigits: 0,
+		}).format(price);
+	} catch {
+		return `${price.toLocaleString("ru-RU")} ${currency}`;
+	}
+};
+---
+
+<article class="experience-card">
+	<a href={experienceHref(experience)}>
+		<div class="experience-card__media">
+			{
+				experience.image_url && (
+					<img src={experience.image_url} alt="" loading="lazy" />
+				)
+			}
+		</div>
+		<div class="experience-card__body">
+			<div class="experience-card__meta">
+				{experience.rating && <span>★ {experience.rating}</span>}
+				{
+					experience.review_count && (
+						<span>{formatCount(experience.review_count)} отзывов</span>
+					)
+				}
+			</div>
+			<h3>{experience.title}</h3>
+			{experience.tagline && <p>{experience.tagline}</p>}
+			<div class="experience-card__footer">
+				{formatPrice(experience) && <strong>{formatPrice(experience)}</strong>}
+				{experience.city_name && <span>{experience.city_name}</span>}
+			</div>
+		</div>
+	</a>
+</article>
+
+<style>
+	.experience-card {
+		border-radius: 8px;
+		background: #fff;
+		overflow: hidden;
+		box-shadow: 0 1px 0 rgba(31, 36, 32, 0.08);
+	}
+
+	.experience-card a {
+		display: flex;
+		flex-direction: column;
+		min-height: 100%;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.experience-card__media {
+		height: 210px;
+		background:
+			linear-gradient(135deg, rgba(49, 93, 99, 0.9), rgba(127, 103, 73, 0.9)),
+			#315d63;
+		overflow: hidden;
+	}
+
+	.experience-card__media img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	.experience-card__body {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		padding: 20px;
+		flex: 1;
+	}
+
+	.experience-card__meta,
+	.experience-card__footer {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+		align-items: center;
+		color: #687067;
+		font-size: 0.92rem;
+	}
+
+	.experience-card h3 {
+		margin: 0;
+		font-size: 1.18rem;
+		line-height: 1.22;
+	}
+
+	.experience-card p {
+		margin: 0;
+		color: #555d54;
+		line-height: 1.5;
+	}
+
+	.experience-card__footer {
+		margin-top: auto;
+		justify-content: space-between;
+	}
+
+	.experience-card__footer strong {
+		color: #1f2420;
+		font-size: 1.05rem;
+	}
+
+	@media (max-width: 760px) {
+		.experience-card__media {
+			height: 190px;
+		}
+	}
+</style>
