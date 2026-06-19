@@ -15,6 +15,7 @@ export type {
 	ExperienceFilters,
 	ExperiencePhotoRow,
 	ExperienceRow,
+	ExperienceStatsRow,
 	GuideFilters,
 	GuideRow,
 	HomeTravelData,
@@ -36,6 +37,7 @@ export { getCities, getCity, getTopCities } from "./city-query.js";
 export {
 	getExperience,
 	getExperiencePhotos,
+	getExperienceStats,
 	getExperiences,
 	getExperienceTags,
 	getPopularExperiences,
@@ -55,7 +57,7 @@ export type { SeoEntityType } from "./seo-query.js";
 export { getReviews } from "./review-query.js";
 
 // Search
-export { searchTravel } from "./search-query.js";
+export { getCitySearchExperiences, searchTravel } from "./search-query.js";
 
 // URL helpers
 export {

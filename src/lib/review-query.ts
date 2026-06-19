@@ -29,13 +29,13 @@ export async function getReviews(
 	const extraJoins: string[] = [];
 
 	if (filters.experienceId) {
-		params.push(String(filters.experienceId));
-		where.push(`r.experience_id::text = $${params.length}`);
+		params.push(Number(filters.experienceId));
+		where.push(`r.experience_id = $${params.length}`);
 	}
 
 	if (filters.cityId) {
-		params.push(String(filters.cityId));
-		where.push(`e.city_id::text = $${params.length}`);
+		params.push(Number(filters.cityId));
+		where.push(`e.city_id = $${params.length}`);
 	}
 
 	if (filters.cityTagId) {

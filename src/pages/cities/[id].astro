@@ -1,7 +1,6 @@
 ---
 import Base from "../../layouts/Base.astro";
-import ExperienceCard from "../../components/ExperienceCard.astro";
-import ExcursionFilterBar from "../../components/ExcursionFilterBar.astro";
+import CategoryExcursionResults from "../../components/CategoryExcursionResults.astro";
 import ReviewList from "../../components/ReviewList.astro";
 import TravelPageStyles from "../../components/TravelPageStyles.astro";
 import {
@@ -10,13 +9,16 @@ import {
 	countryHref,
 	getCity,
 	getCityTags,
+	getExperienceStats,
 	getExperiences,
 	getGuides,
 	getReviews,
 	getSeoBlock,
 } from "../../lib/travel-db.js";
+import { excursionHeroLead } from "../../lib/travel-copy.js";
 
 const { id } = Astro.params;
+const isResultsRequest = Astro.request.headers.get("x-requested-with") === "fetch";
 const cityResult = await getCity(id);
 const city = cityResult.rows[0];
 
@@ -49,48 +51,182 @@ const filterState = {
 	movement: currentMovement,
 	price: currentPrice,
 };
+const pageSize = 24;
+const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
+const currentPage = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1;
 
-const [tagsResult, experiencesResult, guidesResult, reviewsResult, seoResult] = await Promise.all([
-	getCityTags(city.id, 80),
-	getExperiences({ limit: 24, cityId: city.id, ...filterState }),
-	getGuides({ limit: 8, cityId: city.id }),
-	getReviews({ limit: 9, cityId: city.id }),
+const [tagsResult, experiencesResult, statsResult, guidesResult, reviewsResult, seoResult] = await Promise.all([
+	isResultsRequest
+		? Promise.resolve({ rows: [], error: null })
+		: getCityTags(city.id, 80),
+	getExperiences({
+		limit: pageSize + 1,
+		offset: (currentPage - 1) * pageSize,
+		cityId: city.id,
+		...filterState,
+	}),
+	getExperienceStats({ cityId: city.id }),
+	isResultsRequest
+		? Promise.resolve({ rows: [], error: null })
+		: getGuides({ limit: 8, cityId: city.id }),
+	isResultsRequest
+		? Promise.resolve({ rows: [], error: null })
+		: getReviews({ limit: 9, cityId: city.id }),
 	getSeoBlock("city", city.id),
 ]);
 
 const tags = tagsResult.rows;
-const experiences = experiencesResult.rows;
+const hasNextPage = experiencesResult.rows.length > pageSize;
+const experiences = experiencesResult.rows.slice(0, pageSize);
+const hasActiveFilters =
+	currentSort !== "popular" ||
+	currentPersons !== "1" ||
+	currentFormat !== "any" ||
+	currentMovement !== "any" ||
+	currentPrice !== "any";
+const totalPagesFromCity = Math.max(1, Math.ceil(Number(city.experience_count ?? 0) / pageSize));
+const pageCount = hasActiveFilters
+	? currentPage + (hasNextPage ? 1 : 0)
+	: totalPagesFromCity;
+const stats = statsResult.rows[0];
 const guides = guidesResult.rows;
 const reviews = reviewsResult.rows;
 const seoBlock = seoResult.rows[0];
 
+const uniqueTags = (items: typeof tags) => {
+	const seen = new Set<string>();
+	return items.filter((tag) => {
+		if (seen.has(tag.id)) return false;
+		seen.add(tag.id);
+		return true;
+	});
+};
 const filteredTags = tags.filter((tag) => tag.name.toLowerCase() !== "все" && tag.slug !== "all" && tag.slug !== "vse");
-const flatTagsLimit = filteredTags.slice(0, 19);
+const uniqueFilteredTags = uniqueTags(filteredTags);
+const flatTagsLimit = uniqueFilteredTags.slice(0, 19);
+const headerSuggestions = uniqueFilteredTags.slice(0, 10).map((tag) => ({
+	title: tag.name,
+	subtitle: "Рубрика",
+	count: tag.experience_count,
+	countLabel: "экскурсий",
+	href: cityCategoryHref(city, tag),
+}));
 
 const tagsByCategory = filteredTags.reduce((groups, tag) => {
-	const groupName = tag.category || tag.tag_category || "Категории";
-	const group = groups.get(groupName) ?? [];
-	group.push(tag);
-	groups.set(groupName, group);
+	const groupName = tag.group_name || tag.category || tag.tag_category || "Категории";
+	const termName = tag.term_name || "Разное";
+	const terms = groups.get(groupName) ?? new Map<string, typeof filteredTags>();
+	const termTags = terms.get(termName) ?? [];
+	if (!termTags.some((item) => item.id === tag.id)) {
+		termTags.push(tag);
+	}
+	terms.set(termName, termTags);
+	groups.set(groupName, terms);
 	return groups;
-}, new Map<string, any[]>());
+}, new Map<string, Map<string, typeof filteredTags>>());
 
 const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
 
 const cityPhrase = city.in_obj_phrase || `в ${city.name}`;
 const pageTitleText = `Экскурсии ${cityPhrase}`;
-const cityLead = `${formatCount(city.experience_count)} экскурсий и маршрутов${
-	city.guides_count > 0 ? `, ${formatCount(city.guides_count)} гидов` : ""
-}.`;
+const cityLead = excursionHeroLead({
+	count: stats?.count ?? city.experience_count,
+	placePhrase: cityPhrase,
+	minPriceValue: stats?.min_price_value,
+	minPriceCurrency: stats?.min_price_currency,
+	guidesCount: city.guides_count,
+});
+const paginationItems = (() => {
+	if (hasActiveFilters) {
+		const start = Math.max(1, currentPage - 2);
+		const end = currentPage + (hasNextPage ? 1 : 0);
+		return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+	}
+
+	if (pageCount <= 7) return Array.from({ length: pageCount }, (_, index) => index + 1);
+
+	const items: Array<number | "ellipsis-start" | "ellipsis-end"> = [1];
+	const start = Math.max(2, currentPage - 1);
+	const end = Math.min(pageCount - 1, currentPage + 1);
+
+	if (start > 2) items.push("ellipsis-start");
+	for (let page = start; page <= end; page += 1) items.push(page);
+	if (end < pageCount - 1) items.push("ellipsis-end");
+	items.push(pageCount);
+
+	return items;
+})();
+const pageHref = (page: number) => {
+	const params = new URLSearchParams(Astro.url.searchParams);
+	params.delete("__root");
+
+	if (page <= 1) {
+		params.delete("page");
+	} else {
+		params.set("page", String(page));
+	}
+
+	const query = params.toString();
+	return query ? `${preferredPath}?${query}` : preferredPath;
+};
 
 Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=120");
 ---
 
-<Base title={pageTitleText} description={`Экскурсии: ${city.name}`} searchCity={city}>
+{
+	isResultsRequest ? (
+		<>
+			<title>{pageTitleText} — Гидми</title>
+			<div data-page-hero-media>
+				{city.image_url && <img src={city.image_url} alt="" />}
+			</div>
+			<div class="page-hero__inner" data-page-hero-inner>
+				<nav class="breadcrumbs" aria-label="Хлебные крошки">
+					<a href="/">Гидми</a>
+					{
+						country && city.country_name && (
+							<>
+								<span>/</span>
+								<a href={countryHref(country)}>{city.country_name}</a>
+							</>
+						)
+					}
+					<span>/</span>
+					<span>{city.name}</span>
+				</nav>
+				<h1>{pageTitleText}</h1>
+				<p class="page-lead">{cityLead}</p>
+			</div>
+			<CategoryExcursionResults
+				title={`Популярные экскурсии ${cityPhrase}`}
+				preferredPath={preferredPath}
+				filterState={filterState}
+				experiences={experiences}
+				pageCount={pageCount}
+				currentPage={currentPage}
+				paginationItems={paginationItems}
+				pageHref={pageHref}
+			/>
+			<section class="section" data-seo-section>
+				<div class="section__heading">
+					<h2>{seoBlock?.h2 ?? "Заголовок"}</h2>
+				</div>
+				<div class="empty-card">{seoBlock?.body ?? "Текст"}</div>
+			</section>
+		</>
+	) : (
+<Base
+	title={pageTitleText}
+	description={`Экскурсии: ${city.name}`}
+	searchCity={city}
+	headerSuggestions={headerSuggestions}
+>
 	<TravelPageStyles />
 	<section class="page-hero">
-		{city.image_url && <img src={city.image_url} alt="" />}
-		<div class="page-hero__inner">
+		<div data-page-hero-media>
+			{city.image_url && <img src={city.image_url} alt="" />}
+		</div>
+		<div class="page-hero__inner" data-page-hero-inner>
 			<nav class="breadcrumbs" aria-label="Хлебные крошки">
 				<a href="/">Гидми</a>
 				{
@@ -104,25 +240,125 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 				<span>/</span>
 				<span>{city.name}</span>
 			</nav>
-			<p class="eyebrow">Город{city.country_name ? ` · ${city.country_name}` : ""}</p>
-			<h1>{city.name}</h1>
+			<h1>{pageTitleText}</h1>
 			<p class="page-lead">{cityLead}</p>
 		</div>
 	</section>
 
+	<script is:inline>
+		(() => {
+			if (window.__gidmiCategoryModalControls) return;
+			window.__gidmiCategoryModalControls = true;
+
+			const openModal = () => {
+				const modal = document.getElementById("categoryModal");
+				if (!modal) {
+					window.requestAnimationFrame(openModal);
+					return;
+				}
+
+				modal.removeAttribute("aria-hidden");
+				modal.hidden = false;
+				document.body.style.overflow = "hidden";
+				window.requestAnimationFrame(() => {
+					modal.querySelector("[data-category-search]")?.focus();
+				});
+			};
+
+			const resetSearch = (modal) => {
+				const search = modal.querySelector("[data-category-search]");
+				if (search) search.value = "";
+
+				modal.querySelectorAll(".category-filter[href], .category-subgroup, .category-group").forEach((item) => {
+					item.hidden = false;
+				});
+
+				const empty = modal.querySelector("[data-category-search-empty]");
+				if (empty) empty.hidden = true;
+			};
+
+			const closeModal = () => {
+				const modal = document.getElementById("categoryModal");
+				if (!modal) return;
+
+				modal.setAttribute("aria-hidden", "true");
+				modal.hidden = true;
+				resetSearch(modal);
+				document.body.style.overflow = "";
+			};
+
+			document.addEventListener("click", (event) => {
+				const target = event.target;
+				if (!(target instanceof Element)) return;
+
+				if (target.closest("[data-more-categories-trigger]")) {
+					event.preventDefault();
+					openModal();
+					return;
+				}
+
+				if (target.closest("[data-close-modal]")) {
+					event.preventDefault();
+					closeModal();
+				}
+			});
+
+			document.addEventListener("keydown", (event) => {
+				if (event.key === "Escape") closeModal();
+			});
+
+			document.addEventListener("input", (event) => {
+				const target = event.target;
+				if (!(target instanceof HTMLInputElement) || !target.matches("[data-category-search]")) return;
+
+				const modal = target.closest(".category-modal");
+				if (!modal) return;
+
+				const query = target.value.trim().toLocaleLowerCase("ru-RU");
+				let visibleCount = 0;
+
+				modal.querySelectorAll(".category-modal__body .category-filter[href]").forEach((link) => {
+					const matches = !query || link.textContent.toLocaleLowerCase("ru-RU").includes(query);
+					link.hidden = !matches;
+					if (matches) visibleCount += 1;
+				});
+
+				modal.querySelectorAll(".category-subgroup").forEach((subgroup) => {
+					const hasVisibleLinks = Boolean(subgroup.querySelector(".category-filter[href]:not([hidden])"));
+					subgroup.hidden = !hasVisibleLinks;
+				});
+
+				modal.querySelectorAll(".category-group").forEach((group) => {
+					const hasVisibleSubgroups = Boolean(group.querySelector(".category-subgroup:not([hidden])"));
+					group.hidden = !hasVisibleSubgroups;
+				});
+
+				const empty = modal.querySelector("[data-category-search-empty]");
+				if (empty) empty.hidden = visibleCount > 0;
+			});
+		})();
+	</script>
+
 	<section class="section category-section" id="categories">
-		{city.about_obj_phrase && <p class="prose">{city.about_obj_phrase}</p>}
 		{
 			tags.length > 0 ? (
 				<div class="category-panel">
-					<div class="category-panel__label">Категории</div>
+					<div class="category-panel__row">
+						<div class="category-panel__label">Категории</div>
+						{uniqueFilteredTags.length > 19 && (
+							<button class="category-filter category-filter--more" data-more-categories-trigger>
+								Все категории <span>▾</span>
+							</button>
+						)}
+					</div>
 					<div class="category-filter-list">
-						<a class="category-filter category-filter--active" href={cityHref(city)}>
+						<a data-filter-link class="category-filter category-filter--active" href={cityHref(city)}>
 							<span>Все экскурсии</span>
 							<small>{formatCount(city.experience_count)}</small>
 						</a>
 						{flatTagsLimit.map((tag: any) => (
 							<a
+								data-filter-link
 								class="category-filter"
 								href={cityCategoryHref(city, tag)}
 							>
@@ -130,35 +366,39 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 								<small>{formatCount(tag.experience_count)}</small>
 							</a>
 						))}
-						{filteredTags.length > 19 && (
-							<button class="category-filter category-filter--more" data-more-categories-trigger>
-								Еще категории <span>▾</span>
-							</button>
-						)}
 					</div>
 
-					{filteredTags.length > 19 && (
-						<div class="category-modal" id="categoryModal" aria-hidden="true" role="dialog">
+					{uniqueFilteredTags.length > 19 && (
+						<div class="category-modal" id="categoryModal" aria-hidden="true" role="dialog" hidden>
 							<div class="category-modal__backdrop" data-close-modal></div>
 							<div class="category-modal__container">
 								<div class="category-modal__header">
-									<h2>Все категории экскурсий в {city.in_obj_phrase || city.name}</h2>
+									<h2>Категории {city.in_obj_phrase || `в ${city.name}`}</h2>
 									<button class="category-modal__close" data-close-modal aria-label="Закрыть">✕</button>
 								</div>
+								<div class="category-modal__search">
+									<input data-category-search type="search" placeholder="Найти категорию" autocomplete="off" />
+								</div>
 								<div class="category-modal__body">
-									{Array.from(tagsByCategory.entries()).map(([groupName, groupTags]) => (
+									{Array.from(tagsByCategory.entries()).map(([groupName, terms]) => (
 										<div class="category-group">
 											<h3>{groupName}</h3>
-											<div class="category-filter-list">
-												{groupTags.map((tag: any) => (
-													<a class="category-filter" href={cityCategoryHref(city, tag)}>
-														<span>{tag.name}</span>
-														<small>{formatCount(tag.experience_count)}</small>
-													</a>
-												))}
-											</div>
+											{Array.from(terms.entries()).map(([termName, groupTags]) => (
+												<div class="category-subgroup">
+													{termName !== "Разное" && <h4>{termName}</h4>}
+													<div class="category-filter-list">
+														{groupTags.map((tag: any) => (
+															<a data-filter-link class="category-filter" href={cityCategoryHref(city, tag)}>
+																<span>{tag.name}</span>
+																<small>{formatCount(tag.experience_count)}</small>
+															</a>
+														))}
+													</div>
+												</div>
+											))}
 										</div>
 									))}
+									<div class="category-modal__empty" data-category-search-empty hidden>Категории не найдены.</div>
 								</div>
 							</div>
 						</div>
@@ -170,26 +410,19 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		}
 	</section>
 
-	<section class="section" id="excursions" data-excursion-results>
-		<div class="section__heading">
-			<p class="eyebrow">Экскурсии</p>
-			<h2>Популярные экскурсии в городе</h2>
-		</div>
-		<ExcursionFilterBar preferredPath={preferredPath} state={filterState} />
-		{
-			experiences.length > 0 ? (
-				<div class="grid">
-					{experiences.map((experience) => <ExperienceCard experience={experience} />)}
-				</div>
-			) : (
-				<div class="empty-card">Популярные экскурсии появятся после обновления данных.</div>
-			)
-		}
-	</section>
+	<CategoryExcursionResults
+		title={`Популярные экскурсии ${cityPhrase}`}
+		preferredPath={preferredPath}
+		filterState={filterState}
+		experiences={experiences}
+		pageCount={pageCount}
+		currentPage={currentPage}
+		paginationItems={paginationItems}
+		pageHref={pageHref}
+	/>
 
 	<section class="section">
 		<div class="section__heading">
-			<p class="eyebrow">Гиды</p>
 			<h2>Гиды в городе</h2>
 		</div>
 		{
@@ -219,7 +452,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 	<section class="section">
 		<div class="section__heading">
-			<p class="eyebrow">Отзывы</p>
 			<h2>Отзывы путешественников</h2>
 		</div>
 		<ReviewList
@@ -229,63 +461,32 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		/>
 	</section>
 
-	<section class="section">
+	<section class="section" data-seo-section>
 		<div class="section__heading">
-			<p class="eyebrow">SEO</p>
 			<h2>{seoBlock?.h2 ?? "Заголовок"}</h2>
 		</div>
 		<div class="empty-card">{seoBlock?.body ?? "Текст"}</div>
 	</section>
-
-	<script is:inline>
-		(() => {
-			const setupModalToggles = () => {
-				const trigger = document.querySelector('[data-more-categories-trigger]');
-				const modal = document.getElementById('categoryModal');
-				if (!trigger || !modal) return;
-
-				const openModal = () => {
-					modal.removeAttribute('aria-hidden');
-					document.body.style.overflow = 'hidden';
-				};
-
-				const closeModal = () => {
-					modal.setAttribute('aria-hidden', 'true');
-					document.body.style.overflow = '';
-				};
-
-				trigger.addEventListener('click', openModal);
-
-				modal.querySelectorAll('[data-close-modal]').forEach(el => {
-					el.addEventListener('click', closeModal);
-				});
-
-				document.addEventListener('keydown', (e) => {
-					if (e.key === 'Escape' && !modal.hasAttribute('aria-hidden')) {
-						closeModal();
-					}
-				});
-			};
-
-			if (document.readyState === "loading") {
-				document.addEventListener("DOMContentLoaded", setupModalToggles, { once: true });
-			} else {
-				setupModalToggles();
-			}
-		})();
-	</script>
-
 	<style>
 		.category-panel {
 			display: grid;
 			gap: 12px;
 		}
 
+		.category-panel__row {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+		}
+
+		.category-panel__row .category-filter--more {
+			margin-left: auto;
+		}
+
 		.category-panel__label {
 			font-size: 1.18rem;
 			font-weight: 800;
 			color: #1f2420;
-			margin-bottom: 6px;
 		}
 
 		/* Modal styles */
@@ -300,6 +501,10 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			opacity: 0;
 			pointer-events: none;
 			transition: opacity 0.25s ease;
+		}
+
+		.category-modal[hidden] {
+			display: none;
 		}
 
 		.category-modal:not([aria-hidden="true"]) {
@@ -338,6 +543,30 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			}
 		}
 
+		.category-modal__search {
+			padding: 14px 24px;
+			border-bottom: 1px solid rgba(31, 36, 32, 0.1);
+			background: #fff;
+		}
+
+		.category-modal__search input {
+			width: 100%;
+			height: 44px;
+			padding: 0 14px;
+			border: 1px solid rgba(31, 36, 32, 0.16);
+			border-radius: 8px;
+			color: #1f2420;
+			background: #fff;
+			font: inherit;
+			font-size: 1rem;
+			outline: none;
+		}
+
+		.category-modal__search input:focus {
+			border-color: #0486fe;
+			box-shadow: 0 0 0 4px rgba(4, 134, 254, 0.14);
+		}
+
 		.category-modal__header {
 			display: flex;
 			align-items: center;
@@ -371,42 +600,51 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 		.category-modal__close:hover {
 			color: #fff;
-			background: #315d63;
+			background: #0486fe;
 		}
 
 		.category-modal__body {
 			flex: 1;
+			min-height: 0;
 			overflow-y: auto;
 			padding: 24px;
 			display: grid;
+			align-content: start;
 			gap: 24px;
 		}
 
+		.category-modal__empty {
+			padding: 18px;
+			border-radius: 8px;
+			color: #687067;
+			background: #f5f6f6;
+			font-weight: 700;
+		}
+
+		.category-modal [hidden] {
+			display: none !important;
+		}
+
 		.category-filter--more {
-			border-color: #315d63;
-			color: #315d63;
-			background: rgba(49, 93, 99, 0.05);
+			border-color: #0486fe;
+			color: #0486fe;
+			background: rgba(31, 115, 201, 0.05);
 			cursor: pointer;
 		}
 
 		.category-filter--more:hover {
 			color: #fff;
-			background: #315d63;
+			background: #0486fe;
 		}
 
 		.more-categories-btn:hover {
 			color: #fff;
-			background: #315d63;
-		}
-
-		.category-section {
-			padding-top: 30px;
-			padding-bottom: 28px;
+			background: #0486fe;
 		}
 
 		.category-group {
 			display: grid;
-			gap: 7px;
+			gap: 12px;
 		}
 
 		.category-group h3 {
@@ -416,7 +654,26 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			line-height: 1.25;
 		}
 
-		.category-filter-list {
+		.category-subgroup {
+			display: grid;
+			gap: 7px;
+		}
+
+		.category-subgroup h4 {
+			margin: 0;
+			color: #687067;
+			font-size: 0.86rem;
+			line-height: 1.25;
+			text-transform: uppercase;
+		}
+
+		.category-panel > .category-filter-list {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 7px;
+		}
+
+		.category-modal__body .category-filter-list {
 			display: flex;
 			flex-wrap: wrap;
 			gap: 7px;
@@ -429,24 +686,24 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			min-height: 32px;
 			padding: 5px 9px;
 			border: 1px solid rgba(31, 36, 32, 0.12);
-			border-radius: 999px;
+			border-radius: 8px;
 			color: #1f2420;
 			background: #fff;
 			text-decoration: none;
-			font-weight: 800;
 			font-size: 0.92rem;
+			flex-shrink: 0;
 		}
 
 		.category-filter small {
 			color: #687067;
 			font-size: 0.86rem;
-			font-weight: 750;
+			font-weight: 600;
 		}
 
 		.category-filter--active {
 			width: fit-content;
-			border-color: #315d63;
-			background: #315d63;
+			border-color: #0486fe;
+			background: #0486fe;
 			color: #fff;
 		}
 
@@ -465,10 +722,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			grid-template-columns: minmax(0, 1fr) auto;
 			gap: 8px 16px;
 			align-items: end;
-		}
-
-		.section__heading--row .eyebrow {
-			grid-column: 1 / -1;
 		}
 
 		.sort-menu {
@@ -517,7 +770,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 		.sort-menu__link--active {
 			color: #fff;
-			background: #315d63;
+			background: #0486fe;
 		}
 
 		.guide-card {
@@ -567,6 +820,32 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		}
 
 		@media (max-width: 760px) {
+			.category-modal {
+				align-items: flex-end;
+				padding: 8px 0 0;
+			}
+
+			.category-modal__container {
+				height: calc(100dvh - 8px);
+				max-height: calc(100dvh - 8px);
+				border-radius: 12px 12px 0 0;
+			}
+
+			.category-panel > .category-filter-list {
+				display: flex;
+				flex-direction: column;
+				flex-wrap: wrap;
+				gap: 7px;
+				max-height: calc(2 * 32px + 7px);
+				overflow-x: auto;
+				-webkit-overflow-scrolling: touch;
+				scrollbar-width: none;
+			}
+
+			.category-panel > .category-filter-list::-webkit-scrollbar {
+				display: none;
+			}
+
 			.section__heading--row {
 				grid-template-columns: 1fr;
 			}
@@ -577,3 +856,5 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		}
 	</style>
 </Base>
+	)
+}

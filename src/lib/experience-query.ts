@@ -1,5 +1,7 @@
 import { query } from "./db.js";
 import {
+	experienceCardColumns,
+	experienceCardJoins,
 	experienceColumns,
 	experienceJoins,
 	experienceOrderBy,
@@ -8,6 +10,7 @@ import type {
 	ExperienceFilters,
 	ExperiencePhotoRow,
 	ExperienceRow,
+	ExperienceStatsRow,
 	QueryResult,
 	TagRow,
 } from "./travel-types.js";
@@ -17,9 +20,9 @@ export async function getPopularExperiences(
 ): Promise<QueryResult<ExperienceRow>> {
 	return query<ExperienceRow>(
 		`
-		select ${experienceColumns}
+		select ${experienceCardColumns}
 		from experiences e
-		${experienceJoins}
+		${experienceCardJoins}
 		order by ${experienceOrderBy("popular")}
 		limit $1
 		`,
@@ -30,18 +33,83 @@ export async function getPopularExperiences(
 export async function getExperiences(
 	filters: ExperienceFilters = {},
 ): Promise<QueryResult<ExperienceRow>> {
+	const { where, params, extraJoins } = buildExperienceFilterClauses(filters);
+
+	const limit = filters.limit ?? 48;
+	const offset = filters.offset ?? 0;
+	params.push(limit);
+	const limitParam = params.length;
+	params.push(offset);
+	const offsetParam = params.length;
+
+	const whereClause = where.length ? `where ${where.join(" and ")}` : "";
+
+	return query<ExperienceRow>(
+		`
+		select ${experienceCardColumns}
+		from experiences e
+		${extraJoins.join("\n")}
+		${experienceCardJoins}
+		${whereClause}
+		order by ${experienceOrderBy(filters.sort)}
+		limit $${limitParam}
+		offset $${offsetParam}
+		`,
+		params,
+	);
+}
+
+export async function getExperienceStats(
+	filters: Pick<ExperienceFilters, "countryId" | "cityId" | "cityTagId"> = {},
+): Promise<QueryResult<ExperienceStatsRow>> {
+	const { where, params, extraJoins } = buildExperienceFilterClauses(filters);
+	const whereClause = where.length ? `where ${where.join(" and ")}` : "";
+
+	return query<ExperienceStatsRow>(
+		`
+		with filtered as (
+			select
+				e.id,
+				e.price_value,
+				e.price_currency
+			from experiences e
+			${extraJoins.join("\n")}
+			${whereClause}
+		),
+		min_price as (
+			select
+				price_value,
+				price_currency
+			from filtered
+			where price_value is not null
+			order by price_value asc nulls last, id desc
+			limit 1
+		)
+		select
+			count(filtered.id)::int as count,
+			min_price.price_value as min_price_value,
+			min_price.price_currency as min_price_currency
+		from filtered
+		left join min_price on true
+		group by min_price.price_value, min_price.price_currency
+		`,
+		params,
+	);
+}
+
+function buildExperienceFilterClauses(filters: ExperienceFilters) {
 	const where: string[] = [];
 	const params: unknown[] = [];
 	const extraJoins: string[] = [];
 
 	if (filters.countryId) {
-		params.push(String(filters.countryId));
-		where.push(`e.country_id::text = $${params.length}`);
+		params.push(Number(filters.countryId));
+		where.push(`e.country_id = $${params.length}`);
 	}
 
 	if (filters.cityId) {
-		params.push(String(filters.cityId));
-		where.push(`e.city_id::text = $${params.length}`);
+		params.push(Number(filters.cityId));
+		where.push(`e.city_id = $${params.length}`);
 	}
 
 	const personCount = Number(filters.persons);
@@ -78,23 +146,7 @@ export async function getExperiences(
 		where.push(`et.citytag_id = $${params.length}`);
 	}
 
-	const limit = filters.limit ?? 48;
-	params.push(limit);
-
-	const whereClause = where.length ? `where ${where.join(" and ")}` : "";
-
-	return query<ExperienceRow>(
-		`
-		select ${experienceColumns}
-		from experiences e
-		${extraJoins.join("\n")}
-		${experienceJoins}
-		${whereClause}
-		order by ${experienceOrderBy(filters.sort)}
-		limit $${params.length}
-		`,
-		params,
-	);
+	return { where, params, extraJoins };
 }
 
 export async function getExperience(
@@ -105,10 +157,10 @@ export async function getExperience(
 		select ${experienceColumns}
 		from experiences e
 		${experienceJoins}
-		where e.id::text = $1
+		where e.id = $1
 		limit 1
 		`,
-		[String(id)],
+		[Number(id)],
 	);
 }
 
@@ -124,11 +176,11 @@ export async function getExperiencePhotos(
 			coalesce(p.medium_url, p.thumbnail_xl_url, p.thumbnail_l_url,
 			         p.thumbnail_m_url, p.thumbnail_url) as image_url
 		from experience_photos p
-		where p.experience_id::text = $1
+		where p.experience_id = $1
 		order by p.position asc
 		limit $2
 		`,
-		[String(experienceId), limit],
+		[Number(experienceId), limit],
 	);
 }
 
@@ -139,16 +191,33 @@ export async function getExperienceTags(
 	const { tagColumns } = await import("./sql-fragments.js");
 	return query<TagRow>(
 		`
-		select distinct
+		with selected_city_tags as (
+			select ct.*
+			from (
+				select distinct citytag_id
+				from experience_tags
+				where experience_id = $1
+			) et
+			inner join tripster_city_tags ct on ct.citytag_id = et.citytag_id
+			left join tripster_tags tt on tt.id = ct.tag_id
+			order by ct.experience_count desc nulls last, coalesce(ct.name, tt.name) asc
+			limit $2
+		)
+		select
 			${tagColumns()}
-		from experience_tags et
-		inner join tags t on t.citytag_id = et.citytag_id
-		left join cities city on city.id = t.city_id
+		from selected_city_tags ct
+		left join tripster_tags tt on tt.id = ct.tag_id
+		left join tag_category_links tcl on tcl.tag_id = ct.tag_id
+		left join tag_category_catalog cat on cat.id = tcl.catalog_id
+		left join cities city on city.id = ct.city_id
 		left join countries country on country.id = city.country_id
-		where et.experience_id::text = $1
-		order by t.experience_count desc nulls last, t.name asc
+		order by
+			cat.main_sort_order asc nulls last,
+			cat.sub_sort_order asc nulls last,
+			ct.experience_count desc nulls last,
+			coalesce(ct.name, tt.name) asc
 		limit $2
 		`,
-		[String(experienceId), limit],
+		[Number(experienceId), limit],
 	);
 }

@@ -16,7 +16,7 @@ const country = countryResult.rows[0];
 const city = cityResult.rows[0];
 
 if (country && city?.country_id === country.id) {
-	return Astro.rewrite(`/cities/${city.slug || city.id}?${rewriteParams.toString()}`);
+	return Astro.rewrite(`/cities/${city.id}?${rewriteParams.toString()}`);
 }
 
 return Astro.rewrite(`/cities/${id}/categories/${tagId}?${rewriteParams.toString()}`);

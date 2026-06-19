@@ -23,6 +23,7 @@ interface Props {
 	description?: string | null;
 	image?: string | null;
 	canonical?: string | null;
+	headerSuggestions?: HeaderSuggestion[];
 	/** Pass content reference for plugin page contributions on content pages */
 	content?: { collection: string; id: string; slug?: string | null };
 	searchCity?: {
@@ -35,10 +36,25 @@ interface Props {
 	};
 }
 
-const { title, pageTitle, description, image, canonical, content, searchCity } = Astro.props;
-const { siteTitle, siteTagline } = resolveStarterSiteIdentity(await getSiteSettings());
-const fullTitle = title.includes(siteTitle) ? title : `${title} — ${siteTitle}`;
-const pageDescription = description ?? siteTagline;
+interface HeaderSuggestion {
+	title: string;
+	subtitle: string | null;
+	count: number;
+	countLabel: string;
+	href: string;
+}
+
+const {
+	title,
+	pageTitle,
+	description,
+	image,
+	canonical,
+	content,
+	searchCity,
+	headerSuggestions: providedHeaderSuggestions,
+} = Astro.props;
+const isHomePage = Astro.url.pathname === "/";
 
 const navItems = [
 	{ label: "Страны", url: "/countries" },
@@ -82,8 +98,11 @@ const headerSuggestionsTitle = searchCity
 	? `Популярные рубрики ${cityPhrase}`
 	: "Популярные направления";
 
-const headerSuggestions = searchCity
-	? (await getCityTags(searchCity.id, 12)).rows
+const siteSettingsPromise = getSiteSettings();
+const headerSuggestionsPromise = providedHeaderSuggestions
+	? Promise.resolve(providedHeaderSuggestions)
+	: searchCity
+		? getCityTags(searchCity.id, 12).then((result) => result.rows
 		.filter((tag) => tag.name.toLowerCase() !== "все" && tag.slug !== "all" && tag.slug !== "vse")
 		.slice(0, 10)
 		.map((tag) => ({
@@ -92,23 +111,28 @@ const headerSuggestions = searchCity
 			count: tag.experience_count,
 			countLabel: excursionLabel(tag.experience_count),
 			href: cityCategoryHref(searchCity, tag),
-		}))
-	: [
-		...(await getTopCountries(6)).rows.map((country) => ({
+		})))
+		: Promise.all([getTopCountries(6), getTopCities(5)]).then(([countries, cities]) => [
+		...countries.rows.map((country) => ({
 			title: country.name,
 			subtitle: null,
 			count: country.experience_count,
 			countLabel: offerLabel(country.experience_count),
 			href: countryHref(country),
 		})),
-		...(await getTopCities(5)).rows.map((city) => ({
+		...cities.rows.map((city) => ({
 			title: city.name,
 			subtitle: city.country_name,
 			count: city.experience_count,
 			countLabel: offerLabel(city.experience_count),
 			href: cityHref(city),
 		})),
-	];
+	]);
+
+const { siteTitle, siteTagline } = resolveStarterSiteIdentity(await siteSettingsPromise);
+const headerSuggestions = await headerSuggestionsPromise;
+const fullTitle = title.includes(siteTitle) ? title : `${title} — ${siteTitle}`;
+const pageDescription = description ?? siteTagline;
 
 const pageCtx = createPublicPageContext({
 	Astro,
@@ -139,26 +163,22 @@ const pageCtx = createPublicPageContext({
 	<body>
 		<EmDashBodyStart page={pageCtx} />
 
-		<header class="site-header">
+		<header class:list={["site-header", isHomePage && "site-header--home"]}>
 			<nav class="site-header__nav" aria-label="Основная навигация">
 				<a class="brand-link" href="/" aria-label={siteTitle}>
-					<picture>
-						<source srcset="/gidmi-logo.webp" type="image/webp" />
-						<img class="brand-link__mark" src="/gidmi-logo.png" alt="" />
-					</picture>
-					<span>{siteTitle}</span>
+					<img class="brand-link__mark" src="/gidmi_logo_site_light_96h.png" alt="" />
 				</a>
 				<div class="site-header__links">
 					{
 						navItems.map((item) => (
-							<a href={item.url}>
+						<a class:list={[item.url === "/countries" || item.url === "/cities" ? "site-header__link--primary" : null]} href={item.url}>
 								{item.label}
 							</a>
 						))
 					}
 				</div>
 				<div class="site-header__search">
-					<SearchBox variant="header" placeholder="Найти направление" resultsListId="desktop-search-results" />
+					<SearchBox variant="header" placeholder="Куда собираетесь?" resultsListId="desktop-search-results" />
 					{
 						headerSuggestions.length > 0 && (
 							<div class="site-header__desktop-suggestions">
@@ -215,7 +235,9 @@ const pageCtx = createPublicPageContext({
 						aria-expanded="false"
 						data-header-toggle="search"
 					>
-						<span aria-hidden="true"></span>
+						<svg viewBox="0 0 24 24" aria-hidden="true">
+							<path d="M10.8 4a6.8 6.8 0 1 1 0 13.6 6.8 6.8 0 0 1 0-13.6Zm0 2a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6Zm5.2 9 4 4-1.4 1.4-4-4L16 15Z" />
+						</svg>
 					</button>
 				</div>
 				<div class="site-header__panel site-header__panel--menu" id="mobile-menu" hidden data-header-panel="menu">
@@ -228,7 +250,7 @@ const pageCtx = createPublicPageContext({
 					}
 				</div>
 				<div class="site-header__panel site-header__panel--search" id="mobile-search" hidden data-header-panel="search">
-					<SearchBox variant="header" placeholder="Куда вы собираетесь?" resultsListId="mobile-search-results" />
+					<SearchBox variant="header" placeholder="Куда собираетесь?" resultsListId="mobile-search-results" />
 					{
 						headerSuggestions.length > 0 && (
 							<div class="site-header__popular" aria-label={headerSuggestionsTitle}>
@@ -381,7 +403,7 @@ const pageCtx = createPublicPageContext({
 	.site-header__nav {
 		position: relative;
 		display: grid;
-		grid-template-columns: auto minmax(0, 1fr) minmax(260px, 360px);
+		grid-template-columns: auto minmax(0, 1fr) minmax(220px, 260px);
 		align-items: center;
 		gap: 18px;
 		max-width: 1200px;
@@ -400,11 +422,14 @@ const pageCtx = createPublicPageContext({
 	.site-header__links a {
 		color: #3f463f;
 		text-decoration: none;
-		font-weight: 700;
 		white-space: nowrap;
 	}
 
 	.site-header__links a:hover {
+		color: #1f2420;
+	}
+
+	.site-header--home .site-header__links .site-header__link--primary {
 		color: #1f2420;
 	}
 
@@ -457,6 +482,7 @@ const pageCtx = createPublicPageContext({
 	}
 
 	.site-header__popular-results {
+		gap: 4px;
 		margin: 0;
 		padding: 0;
 		list-style: none;
@@ -522,7 +548,7 @@ const pageCtx = createPublicPageContext({
 	}
 
 	.site-header__popular-item:hover .site-header__popular-name {
-		color: #315d63;
+		color: #0486fe;
 	}
 
 	.site-header__desktop-suggestions :global(.ts-dropdown) {
@@ -558,9 +584,9 @@ const pageCtx = createPublicPageContext({
 
 	.site-header__icon:hover,
 	.site-header__icon[aria-expanded="true"] {
-		border-color: #315d63;
+		border-color: #0486fe;
 		color: #fff;
-		background: #315d63;
+		background: #0486fe;
 	}
 
 	.site-header__icon--menu span,
@@ -586,25 +612,10 @@ const pageCtx = createPublicPageContext({
 		transform: translateY(6px);
 	}
 
-	.site-header__icon--search span {
-		position: relative;
-		width: 16px;
-		height: 16px;
-		border: 2px solid currentColor;
-		border-radius: 50%;
-	}
-
-	.site-header__icon--search span::after {
-		content: "";
-		position: absolute;
-		right: -6px;
-		bottom: -4px;
-		width: 8px;
-		height: 2px;
-		border-radius: 999px;
-		background: currentColor;
-		transform: rotate(45deg);
-		transform-origin: center;
+	.site-header__icon--search svg {
+		width: 22px;
+		height: 22px;
+		fill: currentColor;
 	}
 
 	.site-footer {
@@ -615,7 +626,7 @@ const pageCtx = createPublicPageContext({
 
 	.site-footer__inner {
 		display: grid;
-		grid-template-columns: auto minmax(180px, 1fr) auto;
+		grid-template-columns: minmax(0, 1fr) minmax(240px, 50%) minmax(0, 1fr);
 		align-items: start;
 		gap: 32px;
 		max-width: 1200px;
@@ -632,6 +643,12 @@ const pageCtx = createPublicPageContext({
 		display: inline-block;
 		font-size: 1.45rem;
 		font-weight: 900;
+	}
+
+	.site-footer__brand {
+		justify-self: end;
+		max-width: 280px;
+		text-align: right;
 	}
 
 	:global(.brand-link) {
@@ -661,6 +678,8 @@ const pageCtx = createPublicPageContext({
 	.site-footer__nav {
 		display: grid;
 		gap: 10px;
+		justify-self: stretch;
+		justify-items: center;
 	}
 
 	.site-footer__copyright {
@@ -669,6 +688,7 @@ const pageCtx = createPublicPageContext({
 
 	.site-footer__social {
 		display: flex;
+		justify-self: start;
 		justify-content: flex-start;
 		align-items: flex-start;
 		gap: 12px;
@@ -698,8 +718,12 @@ const pageCtx = createPublicPageContext({
 	}
 
 	.site-header .site-header__search :global(.ts-wrap--header) {
-		max-width: 360px;
+		max-width: 260px;
 		margin-left: auto;
+	}
+
+	.site-header__search :global(.ts-wrap--header .ts-input-row) {
+		background: transparent;
 	}
 
 	@media (max-width: 760px) {
@@ -763,14 +787,13 @@ const pageCtx = createPublicPageContext({
 			color: #1f2420;
 			background: #fff;
 			font-size: 0.95rem;
-			font-weight: 800;
 			text-decoration: none;
 		}
 
 		.site-header__panel--menu a:hover {
-			border-color: #315d63;
+			border-color: #0486fe;
 			color: #fff;
-			background: #315d63;
+			background: #0486fe;
 		}
 
 		.site-header__panel--search {
@@ -817,6 +840,7 @@ const pageCtx = createPublicPageContext({
 		}
 
 		.site-header__popular-results {
+			gap: 4px;
 			margin: 0;
 			padding: 0;
 			list-style: none;
@@ -882,7 +906,7 @@ const pageCtx = createPublicPageContext({
 		}
 
 		.site-header__popular-item:hover .site-header__popular-name {
-			color: #315d63;
+			color: #0486fe;
 		}
 
 		.site-header__panel--search :global(.ts-wrap--header) {
@@ -906,7 +930,7 @@ const pageCtx = createPublicPageContext({
 			padding: 9px;
 			border-color: #1f2420;
 			background: #fff;
-			box-shadow: 0 0 0 7px #fff2ca;
+			box-shadow: 0 0 0 7px rgba(31, 115, 201, 0.16);
 		}
 
 		.site-header__panel--search :global(.ts-wrap--header .ts-input-row input[type="search"]) {
@@ -917,6 +941,14 @@ const pageCtx = createPublicPageContext({
 		.site-footer__inner {
 			grid-template-columns: 1fr;
 			padding: 34px 18px;
+		}
+
+		.site-footer__brand,
+		.site-footer__nav,
+		.site-footer__social {
+			justify-self: start;
+			justify-items: start;
+			text-align: left;
 		}
 	}
 </style>

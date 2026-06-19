@@ -53,21 +53,29 @@ export const cityColumns = (alias = "c"): string => `
 	coalesce(${alias}.guides_count, 0)::int as guides_count,
 	coalesce(${alias}.experience_count, 0)::int as experience_count`;
 
-export const tagColumns = (alias = "t"): string => `
-	${alias}.citytag_id::text as id,
-	${alias}.name,
-	${alias}.slug,
-	${alias}.tag_slug,
-	${alias}.category,
-	${alias}.tag_category,
-	${alias}.url,
-	${alias}.image_medium as image_url,
-	${alias}.city_id::text as city_id,
+export const tagColumns = (
+	cityTagAlias = "ct",
+	tagAlias = "tt",
+	categoryAlias = "cat",
+): string => `
+	${cityTagAlias}.citytag_id::text as id,
+	coalesce(${cityTagAlias}.name, ${tagAlias}.name) as name,
+	coalesce(${cityTagAlias}.slug, ${tagAlias}.slug) as slug,
+	${tagAlias}.slug as tag_slug,
+	${cityTagAlias}.category,
+	${tagAlias}.category as tag_category,
+	${categoryAlias}.main_name as group_name,
+	${categoryAlias}.sub_name as term_name,
+	${categoryAlias}.main_slug as group_slug,
+	${categoryAlias}.sub_slug as term_slug,
+	${cityTagAlias}.url,
+	${cityTagAlias}.image_medium as image_url,
+	${cityTagAlias}.city_id::text as city_id,
 	city.slug as city_slug,
 	${displayNameShort("city")} as city_name,
 	country.url as country_url,
 	${slugFromUrl("country")} as country_slug,
-	coalesce(${alias}.experience_count, 0)::int as experience_count`;
+	coalesce(${cityTagAlias}.experience_count, 0)::int as experience_count`;
 
 export const experienceColumns = `
 	e.id::text as id,
@@ -105,11 +113,37 @@ export const experienceColumns = `
 	country.url as country_url,
 	${slugFromUrl("country")} as country_slug,
 	${displayNameShort("city")} as city_name,
+	city.in_obj_phrase as city_in_obj_phrase,
 	${displayNameShort("country")} as country_name,
 	guide.first_name as guide_name,
 	guide.avatar_medium as guide_avatar,
 	guide.rating as guide_rating,
 	guide.review_count as guide_review_count`;
+
+export const experienceCardColumns = `
+	e.id::text as id,
+	e.title,
+	e.tagline,
+	e.url,
+	coalesce(e.cover_image_url, cover.photo_url) as image_url,
+	e.cover_image_url,
+	e.price_value,
+	e.price_currency,
+	e.price_value_string,
+	e.rating,
+	e.review_count,
+	e.duration,
+	e.type,
+	e.format,
+	e.movement_type,
+	e.city_id::text as city_id,
+	e.country_id::text as country_id,
+	city.slug as city_slug,
+	country.url as country_url,
+	${slugFromUrl("country")} as country_slug,
+	${displayNameShort("city")} as city_name,
+	city.in_obj_phrase as city_in_obj_phrase,
+	${displayNameShort("country")} as country_name`;
 
 export const experienceJoins = `
 	left join cities city on city.id = e.city_id
@@ -119,7 +153,21 @@ export const experienceJoins = `
 		select coalesce(p.medium_url, p.thumbnail_xl_url, p.thumbnail_l_url,
 		                p.thumbnail_m_url, p.thumbnail_url) as photo_url
 		from experience_photos p
-		where p.experience_id = e.id
+		where e.cover_image_url is null
+			and p.experience_id = e.id
+		order by p.position asc
+		limit 1
+	) cover on true`;
+
+export const experienceCardJoins = `
+	left join cities city on city.id = e.city_id
+	left join countries country on country.id = e.country_id
+	left join lateral (
+		select coalesce(p.medium_url, p.thumbnail_xl_url, p.thumbnail_l_url,
+		                p.thumbnail_m_url, p.thumbnail_url) as photo_url
+		from experience_photos p
+		where e.cover_image_url is null
+			and p.experience_id = e.id
 		order by p.position asc
 		limit 1
 	) cover on true`;

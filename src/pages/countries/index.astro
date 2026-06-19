@@ -6,6 +6,9 @@ import SearchBox from "../../components/SearchBox.astro";
 import { countryHref, getCountries } from "../../lib/travel-db.js";
 
 const { rows: countries, error } = await getCountries(160);
+const popularCountries = countries.slice(0, 20);
+const otherCountries = countries.slice(20);
+const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
 
 Astro.response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=60");
 ---
@@ -15,18 +18,21 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-r
 	<section class="page-hero">
 		{countries[0]?.image_url && <img src={countries[0].image_url} alt="" />}
 		<div class="page-hero__inner">
-			<p class="eyebrow">Направления</p>
 			<h1>Страны</h1>
 			<p class="page-lead">Выберите страну и посмотрите популярные экскурсии.</p>
 			<SearchBox variant="inline" placeholder="Поиск страны, города или экскурсии" />
 		</div>
 	</section>
 
-	<section class="section">
+		<section class="section">
 		{error && <div class="empty-card">{error}</div>}
-		<div class="grid">
+		<div class="section__heading">
+			<h2>Популярные страны</h2>
+		</div>
+
+		<div class="countries-grid">
 			{
-				countries.map((country) => (
+				popularCountries.map((country) => (
 					<PlaceCard
 						href={countryHref(country)}
 						name={country.name}
@@ -37,5 +43,78 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-r
 				))
 			}
 		</div>
+
+		{
+			otherCountries.length > 0 && (
+				<div class="country-list-wrap">
+					<h3>Остальные страны</h3>
+					<ul class="country-list">
+						{otherCountries.map((country) => (
+							<li>
+								<a href={countryHref(country)}>{country.name}</a>
+								<span>{formatCount(country.experience_count)}</span>
+							</li>
+						))}
+					</ul>
+				</div>
+			)
+		}
 	</section>
+
+	<style>
+		.countries-grid {
+			display: grid;
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			gap: 18px;
+		}
+
+		.country-list-wrap {
+			margin-top: 32px;
+		}
+
+		.country-list-wrap h3 {
+			margin: 0;
+			font-size: 1.02rem;
+			line-height: 1.25;
+		}
+
+		.country-list {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+			gap: 10px 18px;
+			margin: 14px 0 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		.country-list li {
+			display: flex;
+			gap: 12px;
+			justify-content: space-between;
+			padding: 12px 0;
+			border-bottom: 1px solid rgba(31, 36, 32, 0.1);
+		}
+
+		.country-list a {
+			color: #1f2420;
+			font-weight: 750;
+			text-decoration: none;
+		}
+
+		.country-list span {
+			color: #687067;
+		}
+
+		@media (max-width: 1060px) {
+			.countries-grid {
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+			}
+		}
+
+		@media (max-width: 640px) {
+			.countries-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+	</style>
 </Base>

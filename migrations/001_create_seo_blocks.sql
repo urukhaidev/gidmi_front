@@ -45,13 +45,14 @@ on conflict (entity_type, entity_id) do update set
 insert into public.seo_blocks (entity_type, entity_id, h2, body)
 select
 	'city_category',
-	t.citytag_id::text,
+	ct.citytag_id::text,
 	'Популярные экскурсии в Санкт-Петербурге',
 	'В этом разделе собраны экскурсии выбранной категории по Санкт-Петербургу. Сравнивайте программы по длительности, цене, рейтингу и отзывам, чтобы выбрать маршрут для первого знакомства с городом или более узкую тематическую прогулку.'
-from public.tags t
-join public.cities c on c.id = t.city_id
+from public.tripster_city_tags ct
+left join public.tripster_tags tt on tt.id = ct.tag_id
+join public.cities c on c.id = ct.city_id
 where c.slug = 'Saint_Petersburg'
-	and coalesce(t.slug, t.tag_slug) = 'all'
+	and coalesce(ct.slug, tt.slug) = 'all'
 on conflict (entity_type, entity_id) do update set
 	h2 = excluded.h2,
 	body = excluded.body,

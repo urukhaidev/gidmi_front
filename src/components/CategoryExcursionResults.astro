@@ -1,0 +1,70 @@
+---
+import ExperienceCard from "./ExperienceCard.astro";
+import ExcursionFilterBar from "./ExcursionFilterBar.astro";
+import type { ExperienceRow } from "../lib/travel-db.js";
+
+interface Props {
+	title: string;
+	preferredPath: string;
+	filterState: Record<string, string>;
+	experiences: ExperienceRow[];
+	pageCount: number;
+	currentPage: number;
+	paginationItems: Array<number | string>;
+	pageHref: (page: number) => string;
+}
+
+const {
+	title,
+	preferredPath,
+	filterState,
+	experiences,
+	pageCount,
+	currentPage,
+	paginationItems,
+	pageHref,
+} = Astro.props as Props;
+---
+
+<section class="section" data-excursion-results>
+	<div class="section__heading">
+		<h2>{title}</h2>
+	</div>
+	<ExcursionFilterBar preferredPath={preferredPath} state={filterState} />
+	{
+		experiences.length > 0 ? (
+			<>
+				<div class="grid">
+					{experiences.map((experience) => <ExperienceCard experience={experience} showCity={false} />)}
+				</div>
+				{
+					pageCount > 1 && (
+						<nav class="pagination" aria-label="Страницы экскурсий">
+							{currentPage > 1 && (
+								<a data-results-link href={pageHref(currentPage - 1)}>Назад</a>
+							)}
+							{paginationItems.map((item) => (
+								typeof item === "number" ? (
+									item === currentPage ? (
+										<span class="pagination__link--active" aria-current="page">{item}</span>
+									) : (
+										<a data-results-link href={pageHref(item)}>
+											{item}
+										</a>
+									)
+								) : (
+									<span>...</span>
+								)
+							))}
+							{currentPage < pageCount && (
+								<a data-results-link href={pageHref(currentPage + 1)}>Вперед</a>
+							)}
+						</nav>
+					)
+				}
+			</>
+		) : (
+			<div class="empty-card">В этой категории пока нет опубликованных экскурсий.</div>
+		)
+	}
+</section>

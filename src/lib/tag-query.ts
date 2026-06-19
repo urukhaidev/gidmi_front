@@ -5,12 +5,26 @@ import type { QueryResult, TagRow } from "./travel-types.js";
 export async function getTags(limit = 120): Promise<QueryResult<TagRow>> {
 	return query<TagRow>(
 		`
+		with selected_city_tags as (
+			select ct.*
+			from tripster_city_tags ct
+			left join tripster_tags tt on tt.id = ct.tag_id
+			where coalesce(ct.is_hidden, false) = false
+			order by ct.experience_count desc nulls last, coalesce(ct.name, tt.name) asc
+			limit $1
+		)
 		select ${tagColumns()}
-		from tags t
-		left join cities city on city.id = t.city_id
+		from selected_city_tags ct
+		left join tripster_tags tt on tt.id = ct.tag_id
+		left join tag_category_links tcl on tcl.tag_id = ct.tag_id
+		left join tag_category_catalog cat on cat.id = tcl.catalog_id
+		left join cities city on city.id = ct.city_id
 		left join countries country on country.id = city.country_id
-		where coalesce(t.is_hidden, false) = false
-		order by t.experience_count desc nulls last, t.name asc
+		order by
+			cat.main_sort_order asc nulls last,
+			cat.sub_sort_order asc nulls last,
+			ct.experience_count desc nulls last,
+			coalesce(ct.name, tt.name) asc
 		limit $1
 		`,
 		[limit],
@@ -21,10 +35,14 @@ export async function getTag(id: string | undefined): Promise<QueryResult<TagRow
 	return query<TagRow>(
 		`
 		select ${tagColumns()}
-		from tags t
-		left join cities city on city.id = t.city_id
+		from tripster_city_tags ct
+		left join tripster_tags tt on tt.id = ct.tag_id
+		left join tag_category_links tcl on tcl.tag_id = ct.tag_id
+		left join tag_category_catalog cat on cat.id = tcl.catalog_id
+		left join cities city on city.id = ct.city_id
 		left join countries country on country.id = city.country_id
-		where t.citytag_id::text = $1
+		where ct.citytag_id::text = $1
+		order by cat.main_sort_order asc nulls last, cat.sub_sort_order asc nulls last
 		limit 1
 		`,
 		[String(id)],
@@ -37,20 +55,35 @@ export async function getCityTags(
 ): Promise<QueryResult<TagRow>> {
 	return query<TagRow>(
 		`
+		with selected_city_tags as (
+			select ct.*
+			from tripster_city_tags ct
+			left join tripster_tags tt on tt.id = ct.tag_id
+			where ct.city_id = $1::int
+				and coalesce(ct.is_hidden, false) = false
+				and coalesce(ct.experience_count, 0) > 0
+			order by
+				case when lower(coalesce(ct.category, tt.category, '')) = 'top' then 0 else 1 end,
+				ct.experience_count desc nulls last,
+				coalesce(ct.name, tt.name) asc
+			limit $2
+		)
 		select ${tagColumns()}
-		from tags t
-		left join cities city on city.id = t.city_id
+		from selected_city_tags ct
+		left join tripster_tags tt on tt.id = ct.tag_id
+		left join tag_category_links tcl on tcl.tag_id = ct.tag_id
+		left join tag_category_catalog cat on cat.id = tcl.catalog_id
+		left join cities city on city.id = ct.city_id
 		left join countries country on country.id = city.country_id
-		where t.city_id::text = $1
-			and coalesce(t.is_hidden, false) = false
-			and coalesce(t.experience_count, 0) > 0
 		order by
-			case when lower(coalesce(t.category, '')) = 'top' then 0 else 1 end,
-			t.experience_count desc nulls last,
-			t.name asc
+			case when lower(coalesce(ct.category, tt.category, '')) = 'top' then 0 else 1 end,
+			cat.main_sort_order asc nulls last,
+			cat.sub_sort_order asc nulls last,
+			ct.experience_count desc nulls last,
+			coalesce(ct.name, tt.name) asc
 		limit $2
 		`,
-		[String(cityId), limit],
+		[Number(cityId), limit],
 	);
 }
 
@@ -61,19 +94,23 @@ export async function getCityTag(
 	return query<TagRow>(
 		`
 		select ${tagColumns()}
-		from tags t
-		left join cities city on city.id = t.city_id
+		from tripster_city_tags ct
+		left join tripster_tags tt on tt.id = ct.tag_id
+		left join tag_category_links tcl on tcl.tag_id = ct.tag_id
+		left join tag_category_catalog cat on cat.id = tcl.catalog_id
+		left join cities city on city.id = ct.city_id
 		left join countries country on country.id = city.country_id
-		where t.city_id::text = $1
-			and coalesce(t.is_hidden, false) = false
+		where ct.city_id = $1::int
+			and coalesce(ct.is_hidden, false) = false
 			and (
-				t.citytag_id::text = $2
-				or lower(t.slug) = lower($2)
-				or lower(t.tag_slug) = lower($2)
-				or lower(regexp_replace(trim(trailing '/' from t.url), '^.*/', '')) = lower($2)
+				ct.citytag_id::text = $2
+				or lower(ct.slug) = lower($2)
+				or lower(tt.slug) = lower($2)
+				or lower(regexp_replace(trim(trailing '/' from ct.url), '^.*/', '')) = lower($2)
 			)
+		order by cat.main_sort_order asc nulls last, cat.sub_sort_order asc nulls last
 		limit 1
 		`,
-		[String(cityId), String(tagParam)],
+		[Number(cityId), String(tagParam)],
 	);
 }

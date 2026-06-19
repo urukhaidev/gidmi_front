@@ -42,6 +42,9 @@ export async function getCities(limit = 120): Promise<QueryResult<CityRow>> {
 }
 
 export async function getCity(id: string | undefined): Promise<QueryResult<CityDetailRow>> {
+	const numericId = Number(id);
+	const isNumericId = Number.isInteger(numericId);
+
 	return query<CityDetailRow>(
 		`
 		select
@@ -49,11 +52,14 @@ export async function getCity(id: string | undefined): Promise<QueryResult<CityD
 			${displayNameShort("country")} as country_name
 		from cities c
 		left join countries country on country.id = c.country_id
-		where c.id::text = $1
-			or lower(c.slug) = lower($1)
-			or lower(${slugFromUrl("c")}) = lower($1)
+		where ${
+			isNumericId
+				? "c.id = $1"
+				: `lower(c.slug) = lower($1)
+			or lower(${slugFromUrl("c")}) = lower($1)`
+		}
 		limit 1
 		`,
-		[String(id)],
+		[isNumericId ? numericId : String(id)],
 	);
 }

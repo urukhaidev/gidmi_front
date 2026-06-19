@@ -9,13 +9,13 @@ export async function getGuides(
 	const params: unknown[] = [];
 
 	if (filters.countryId) {
-		params.push(String(filters.countryId));
-		where.push(`city.country_id::text = $${params.length}`);
+		params.push(Number(filters.countryId));
+		where.push(`city.country_id = $${params.length}`);
 	}
 
 	if (filters.cityId) {
-		params.push(String(filters.cityId));
-		where.push(`g.city_id::text = $${params.length}`);
+		params.push(Number(filters.cityId));
+		where.push(`g.city_id = $${params.length}`);
 	}
 
 	const limit = filters.limit ?? 12;

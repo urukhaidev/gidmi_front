@@ -20,5 +20,5 @@ if (!country || !city || city.country_id !== country.id) {
 	return Astro.redirect("/404");
 }
 
-return Astro.rewrite(`/cities/${city.slug || city.id}/categories/${tagId}?${rewriteParams.toString()}`);
+return Astro.rewrite(`/cities/${city.id}/categories/${tagId}?${rewriteParams.toString()}`);
 ---

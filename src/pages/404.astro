@@ -6,7 +6,6 @@ import Base from "../layouts/Base.astro";
 	<section class="not-found">
 		<div class="not-found__inner">
 			<span class="not-found__code">404</span>
-			<p class="eyebrow">Страница не найдена</p>
 			<h1>Кажется, вы свернули не туда</h1>
 			<p class="not-found__lead">
 				Страница, которую вы ищете, не существует, была перемещена или временно
@@ -52,14 +51,12 @@ import Base from "../layouts/Base.astro";
 		:global(header nav > a:first-child) {
 			margin-right: auto;
 			color: #1f2420;
-			font-weight: 850;
 			text-decoration: none;
 		}
 
 		:global(header nav a) {
 			color: #3f463f;
 			text-decoration: none;
-			font-weight: 700;
 		}
 
 		.not-found {
@@ -71,8 +68,8 @@ import Base from "../layouts/Base.astro";
 			padding: 64px 24px;
 			text-align: center;
 			background:
-				linear-gradient(135deg, #315d63, #7f6749 58%, #25332e),
-				#315d63;
+				linear-gradient(135deg, #0486fe, #7f6749 58%, #25332e),
+				#0486fe;
 			color: #fff;
 			overflow: hidden;
 		}
@@ -91,15 +88,6 @@ import Base from "../layouts/Base.astro";
 			line-height: 1;
 			letter-spacing: -0.04em;
 			color: rgba(255, 255, 255, 0.1);
-		}
-
-		.eyebrow {
-			margin: 0 0 12px;
-			color: #cfa464;
-			font-size: 0.78rem;
-			font-weight: 850;
-			letter-spacing: 0;
-			text-transform: uppercase;
 		}
 
 		h1 {

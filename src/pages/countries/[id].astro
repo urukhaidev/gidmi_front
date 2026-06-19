@@ -7,10 +7,12 @@ import {
 	countryHref,
 	getCountry,
 	getCountryCities,
+	getExperienceStats,
 	getExperiences,
 	getGuides,
 	getSeoBlock,
 } from "../../lib/travel-db.js";
+import { excursionHeroLead } from "../../lib/travel-copy.js";
 
 const { id } = Astro.params;
 const countryResult = await getCountry(id);
@@ -26,9 +28,10 @@ if (!isRootRewrite && Astro.url.pathname !== preferredPath) {
 	return Astro.redirect(`${preferredPath}${Astro.url.search}`);
 }
 
-const [citiesResult, experiencesResult, guidesResult, seoResult] = await Promise.all([
+const [citiesResult, experiencesResult, statsResult, guidesResult, seoResult] = await Promise.all([
 	getCountryCities(country.id, 120),
 	getExperiences({ limit: 12, countryId: country.id }),
+	getExperienceStats({ countryId: country.id }),
 	getGuides({ limit: 12, countryId: country.id }),
 	getSeoBlock("country", country.id),
 ]);
@@ -37,13 +40,19 @@ const cities = citiesResult.rows;
 const popularCities = cities.slice(0, 20);
 const otherCities = cities.slice(20);
 const experiences = experiencesResult.rows;
+const stats = statsResult.rows[0];
 const guides = guidesResult.rows;
 const seoBlock = seoResult.rows[0];
 
 const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
-const countryLead = `${formatCount(country.experience_count)} экскурсий и маршрутов${
-	country.guides_count > 0 ? `, ${formatCount(country.guides_count)} гидов` : ""
-}.`;
+const countryPhrase = country.in_obj_phrase || `в ${country.name}`;
+const countryLead = excursionHeroLead({
+	count: stats?.count ?? country.experience_count,
+	placePhrase: countryPhrase,
+	minPriceValue: stats?.min_price_value,
+	minPriceCurrency: stats?.min_price_currency,
+	guidesCount: country.guides_count,
+});
 
 Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=120");
 ---
@@ -53,16 +62,13 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 	<section class="page-hero">
 		{country.image_url && <img src={country.image_url} alt="" />}
 		<div class="page-hero__inner">
-			<p class="eyebrow">Страна</p>
-			<h1>{country.name}</h1>
+			<h1>Экскурсии {countryPhrase}</h1>
 			<p class="page-lead">{countryLead}</p>
 		</div>
 	</section>
 
-	<section class="section">
-		{country.about_obj_phrase && <p class="prose">{country.about_obj_phrase}</p>}
+		<section class="section">
 		<div class="section__heading">
-			<p class="eyebrow">Города</p>
 			<h2>Популярные города</h2>
 		</div>
 
@@ -108,8 +114,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 	<section class="section">
 		<div class="section__heading">
-			<p class="eyebrow">Экскурсии</p>
-			<h2>Популярные экскурсии в стране</h2>
+			<h2>Популярные экскурсии {countryPhrase}</h2>
 		</div>
 		{
 			experiences.length > 0 ? (
@@ -124,7 +129,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 	<section class="section">
 		<div class="section__heading">
-			<p class="eyebrow">Гиды</p>
 			<h2>Гиды в стране</h2>
 		</div>
 		{
@@ -155,7 +159,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 	<section class="section">
 		<div class="section__heading">
-			<p class="eyebrow">Отзывы</p>
 			<h2>Отзывы путешественников</h2>
 		</div>
 		<div class="empty-card">Отзывы будут подключены отдельным блоком после согласования источника данных.</div>
@@ -163,7 +166,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 	<section class="section">
 		<div class="section__heading">
-			<p class="eyebrow">SEO</p>
 			<h2>{seoBlock?.h2 ?? "Заголовок"}</h2>
 		</div>
 		<div class="empty-card">{seoBlock?.body ?? "Текст"}</div>
@@ -192,7 +194,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			height: 128px;
 			background:
 				linear-gradient(135deg, rgba(49, 93, 99, 0.9), rgba(127, 103, 73, 0.9)),
-				#315d63;
+				#0486fe;
 			overflow: hidden;
 		}
 

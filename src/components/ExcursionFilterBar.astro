@@ -58,6 +58,7 @@ const selectedLabel = (options: { value: string; label: string }[], value: strin
 const hrefFor = (updates: Record<string, string>) => {
 	const params = new URLSearchParams(Astro.url.searchParams);
 	params.delete("__root");
+	params.delete("page");
 
 	for (const [key, value] of Object.entries(updates)) {
 		if (!value || value === "any" || (key === "sort" && value === "popular") || (key === "persons" && value === "1")) {
@@ -79,7 +80,7 @@ const hrefFor = (updates: Record<string, string>) => {
 			<span class="filter-menu__note">Дата: любые</span>
 			{personOptions.map((option) => (
 				<a
-					data-filter-link
+					data-results-link
 					class:list={["filter-menu__link", option.value === current.persons && "filter-menu__link--active"]}
 					href={hrefFor({ persons: option.value })}
 				>
@@ -94,7 +95,7 @@ const hrefFor = (updates: Record<string, string>) => {
 		<div class="filter-menu__list">
 			{formatOptions.map((option) => (
 				<a
-					data-filter-link
+					data-results-link
 					class:list={["filter-menu__link", option.value === current.format && "filter-menu__link--active"]}
 					href={hrefFor({ format: option.value })}
 				>
@@ -109,7 +110,7 @@ const hrefFor = (updates: Record<string, string>) => {
 		<div class="filter-menu__list">
 			{movementOptions.map((option) => (
 				<a
-					data-filter-link
+					data-results-link
 					class:list={["filter-menu__link", option.value === current.movement && "filter-menu__link--active"]}
 					href={hrefFor({ movement: option.value })}
 				>
@@ -124,7 +125,7 @@ const hrefFor = (updates: Record<string, string>) => {
 		<div class="filter-menu__list">
 			{priceOptions.map((option) => (
 				<a
-					data-filter-link
+					data-results-link
 					class:list={["filter-menu__link", option.value === current.price && "filter-menu__link--active"]}
 					href={hrefFor({ price: option.value })}
 				>
@@ -139,7 +140,7 @@ const hrefFor = (updates: Record<string, string>) => {
 		<div class="filter-menu__list">
 			{sortOptions.map((option) => (
 				<a
-					data-filter-link
+					data-results-link
 					class:list={["filter-menu__link", option.value === current.sort && "filter-menu__link--active"]}
 					href={hrefFor({ sort: option.value })}
 				>
@@ -156,6 +157,9 @@ const hrefFor = (updates: Record<string, string>) => {
 		window.__gidmiExcursionFilters = true;
 
 		const resultsSelector = "[data-excursion-results]";
+		const heroMediaSelector = "[data-page-hero-media]";
+		const heroSelector = "[data-page-hero-inner]";
+		const seoSelector = "[data-seo-section]";
 
 		async function replaceResults(url, shouldPush = true) {
 			const current = document.querySelector(resultsSelector);
@@ -176,18 +180,30 @@ const hrefFor = (updates: Record<string, string>) => {
 				const nextDocument = new DOMParser().parseFromString(html, "text/html");
 				const next = nextDocument.querySelector(resultsSelector);
 				if (!next) throw new Error("Results block missing");
+				if (shouldPush) history.pushState({}, "", url);
+
+				const currentHeroMedia = document.querySelector(heroMediaSelector);
+				const nextHeroMedia = nextDocument.querySelector(heroMediaSelector);
+				if (currentHeroMedia && nextHeroMedia) currentHeroMedia.replaceWith(nextHeroMedia);
+
+				const currentHero = document.querySelector(heroSelector);
+				const nextHero = nextDocument.querySelector(heroSelector);
+				if (currentHero && nextHero) currentHero.replaceWith(nextHero);
+
+				const currentSeo = document.querySelector(seoSelector);
+				const nextSeo = nextDocument.querySelector(seoSelector);
+				if (currentSeo && nextSeo) currentSeo.replaceWith(nextSeo);
 
 				const nextTitle = nextDocument.querySelector("title")?.textContent;
 				current.replaceWith(next);
 				if (nextTitle) document.title = nextTitle;
-				if (shouldPush) history.pushState({}, "", url);
 			} catch {
 				window.location.href = url.toString();
 			}
 		}
 
 		document.addEventListener("click", (event) => {
-			const link = event.target.closest("a[data-filter-link]");
+			const link = event.target.closest("a[data-results-link]");
 			if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
 			event.preventDefault();

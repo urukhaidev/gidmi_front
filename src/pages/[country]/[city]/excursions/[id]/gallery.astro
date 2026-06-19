@@ -1,8 +1,8 @@
 ---
-import Base from "../../../../layouts/Base.astro";
-import ExperienceCard from "../../../../components/ExperienceCard.astro";
-import ReviewList from "../../../../components/ReviewList.astro";
-import TravelPageStyles from "../../../../components/TravelPageStyles.astro";
+import Base from "../../../../../layouts/Base.astro";
+import ExperienceCard from "../../../../../components/ExperienceCard.astro";
+import ReviewList from "../../../../../components/ReviewList.astro";
+import TravelPageStyles from "../../../../../components/TravelPageStyles.astro";
 import {
 	cityHref,
 	countryHref,
@@ -11,16 +11,12 @@ import {
 	getExperiences,
 	getReviews,
 	experienceHref,
-} from "../../../../lib/travel-db.js";
+} from "../../../../../lib/travel-db.js";
 
 const { id: paramId } = Astro.params;
 const id = paramId ? paramId.split("-")[0] : "";
 
-const [
-	experienceResult,
-	photosResult,
-	reviewsResult,
-] = await Promise.all([
+const [experienceResult, photosResult, reviewsResult] = await Promise.all([
 	getExperience(id),
 	getExperiencePhotos(id),
 	getReviews({ experienceId: id, limit: 8 }),
@@ -32,8 +28,9 @@ if (!experience) {
 }
 
 const canonicalPath = experienceHref(experience);
-if (Astro.url.pathname !== canonicalPath) {
-	return Astro.redirect(`${canonicalPath}${Astro.url.search}`, 301);
+const variantPath = `${canonicalPath}/gallery`;
+if (Astro.url.pathname !== variantPath) {
+	return Astro.redirect(`${variantPath}${Astro.url.search}`, 301);
 }
 
 const searchCity = experience.city_id
@@ -55,8 +52,7 @@ const related = relatedResult.rows.filter((item) => item.id !== experience.id).s
 const photos = photosResult.rows.filter((item) => item.image_url);
 const reviews = reviewsResult.rows;
 const heroImage = experience.image_url ?? photos[0]?.image_url;
-const additionalPhotos = photos.filter((photo) => photo.image_url !== heroImage);
-const galleryPhotos = additionalPhotos.length > 0 ? additionalPhotos : photos;
+const galleryPhotos = photos.length > 0 ? photos : heroImage ? [{ id: experience.id, position: 0, image_url: heroImage }] : [];
 const displayedGalleryPhotos = galleryPhotos.length > 0
 	? Array.from({ length: 5 }, (_, index) => galleryPhotos[index % galleryPhotos.length])
 	: [];
@@ -111,39 +107,59 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 <Base title={experience.title} description={description} image={heroImage} searchCity={searchCity ?? undefined}>
 	<TravelPageStyles />
-	<section class="page-hero">
-		{heroImage && <img src={heroImage} alt="" />}
-		<div class="page-hero__inner">
-			<nav class="breadcrumbs" aria-label="Хлебные крошки">
-				<a href="/">Гидми</a>
-				{countryUrl && <span>/</span>}
-				{countryUrl && <a href={countryUrl}>{experience.country_name}</a>}
-				{cityUrl && <span>/</span>}
-				{cityUrl && <a href={cityUrl}>{experience.city_name}</a>}
-			</nav>
-			<h1>{experience.title}</h1>
-			{experience.tagline && <p class="page-lead">{experience.tagline}</p>}
-			<div class="stats stats--hero stats--plain">
-				{experience.duration && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm1 3v5.1l3.4 2-1 1.7L11 13.2V7h2Z" /></svg></span>{formatDuration(experience.duration)} ч.</span>}
-				{experience.rating && <span><span class="stat-icon" aria-hidden="true">★</span>{experience.rating}</span>}
-				{experience.review_count && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5h16v10H9.2L4 19.5v-14Zm2 2v8l2.5-2H18v-6H6Z" /><path d="M8.5 10.5a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Z" /></svg></span>{formatCount(experience.review_count)} отзывов</span>}
-				{experience.max_persons && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.5 12a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7 0a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM2 20c.4-3.5 3-6 6.5-6s6.1 2.5 6.5 6H2Zm12.6-5.7c.4-.2.9-.3 1.4-.3 3 0 5.2 2.1 5.6 5H17c-.3-1.8-1.1-3.4-2.4-4.7Z" /></svg></span>до {experience.max_persons} человек</span>}
-			</div>
-		</div>
-	</section>
 
-	<section class="section experience-layout">
+	<section class="section gallery-first">
 		{
 			displayedGalleryPhotos.length > 0 ? (
-				<div class="photo-grid">
+				<div class="photo-grid photo-grid--top">
 					{displayedGalleryPhotos.map((photo) => (
 						<img src={photo.image_url} alt="" loading="lazy" />
 					))}
 				</div>
 			) : (
-				<div></div>
+				<div class="gallery-placeholder"></div>
 			)
 		}
+
+		<nav class="gallery-breadcrumbs" aria-label="Хлебные крошки">
+			<a href="/">Гидми</a>
+			{countryUrl && <span>/</span>}
+			{countryUrl && <a href={countryUrl}>{experience.country_name}</a>}
+			{cityUrl && <span>/</span>}
+			{cityUrl && <a href={cityUrl}>{experience.city_name}</a>}
+		</nav>
+	</section>
+
+	<section class="section variant-layout">
+		<article class="variant-main">
+			<div class="title-block">
+				<h1>{experience.title}</h1>
+				{experience.tagline && <p class="page-lead page-lead--plain">{experience.tagline}</p>}
+				<div class="stats stats--plain">
+					{experience.duration && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm1 3v5.1l3.4 2-1 1.7L11 13.2V7h2Z" /></svg></span>{formatDuration(experience.duration)} ч.</span>}
+					{experience.rating && <span><span class="stat-icon" aria-hidden="true">★</span>{experience.rating}</span>}
+					{experience.review_count && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5h16v10H9.2L4 19.5v-14Zm2 2v8l2.5-2H18v-6H6Z" /><path d="M8.5 10.5a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Z" /></svg></span>{formatCount(experience.review_count)} отзывов</span>}
+					{experience.max_persons && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.5 12a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7 0a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM2 20c.4-3.5 3-6 6.5-6s6.1 2.5 6.5 6H2Zm12.6-5.7c.4-.2.9-.3 1.4-.3 3 0 5.2 2.1 5.6 5H17c-.3-1.8-1.1-3.4-2.4-4.7Z" /></svg></span>до {experience.max_persons} человек</span>}
+				</div>
+			</div>
+
+			{
+				(experience.description_new_html || experience.description_html) ? (
+					<div class="prose" set:html={experience.description_new_html || experience.description_html} />
+				) : (
+					description && <p class="prose">{description}</p>
+				)
+			}
+
+			<div class="info-grid">
+				{experience.meeting_point_text && <div><strong>Место встречи</strong><p>{experience.meeting_point_text}</p></div>}
+				{experience.finish_point_text && <div><strong>Финиш</strong><p>{experience.finish_point_text}</p></div>}
+				{experience.schedule_text && <div><strong>Расписание</strong><p>{experience.schedule_text}</p></div>}
+				{experience.additional_info && <div><strong>Дополнительно</strong><p>{experience.additional_info}</p></div>}
+				{experience.price_included_description && <div><strong>Включено</strong><p>{experience.price_included_description}</p></div>}
+				{experience.price_not_included_description && <div><strong>Не включено</strong><p>{experience.price_not_included_description}</p></div>}
+			</div>
+		</article>
 
 		<aside class="detail-sidebar">
 			<div class="side-card">
@@ -174,35 +190,13 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 				)
 			}
 		</aside>
-
-		<article>
-			{
-				(experience.description_new_html || experience.description_html) ? (
-					<div class="prose" set:html={experience.description_new_html || experience.description_html} />
-				) : (
-					description && <p class="prose">{description}</p>
-				)
-			}
-
-			<div class="info-grid">
-				{experience.meeting_point_text && <div><strong>Место встречи</strong><p>{experience.meeting_point_text}</p></div>}
-				{experience.finish_point_text && <div><strong>Финиш</strong><p>{experience.finish_point_text}</p></div>}
-				{experience.schedule_text && <div><strong>Расписание</strong><p>{experience.schedule_text}</p></div>}
-				{experience.additional_info && <div><strong>Дополнительно</strong><p>{experience.additional_info}</p></div>}
-				{experience.price_included_description && <div><strong>Включено</strong><p>{experience.price_included_description}</p></div>}
-				{experience.price_not_included_description && <div><strong>Не включено</strong><p>{experience.price_not_included_description}</p></div>}
-			</div>
-		</article>
 	</section>
 
 	<section class="section">
 		<div class="section__heading">
 			<h2>Отзывы путешественников</h2>
 		</div>
-		<ReviewList
-			reviews={reviews}
-			emptyText="Отзывы об этой экскурсии появятся после обновления данных."
-		/>
+		<ReviewList reviews={reviews} emptyText="Отзывы об этой экскурсии появятся после обновления данных." />
 	</section>
 
 	{
@@ -231,7 +225,58 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			overflow: visible;
 		}
 
-		.experience-layout {
+		.gallery-first {
+			padding-top: 24px;
+			padding-bottom: 24px;
+		}
+
+		.gallery-breadcrumbs {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin: 16px 0 0;
+			color: #687067;
+			font-size: 0.94rem;
+		}
+
+		.gallery-breadcrumbs a {
+			color: inherit;
+			text-decoration: none;
+		}
+
+		.photo-grid {
+			display: flex;
+			overflow-x: auto;
+			overflow-y: hidden;
+			gap: 10px;
+			width: 100%;
+			max-width: 100%;
+			padding-bottom: 6px;
+			scroll-snap-type: x proximity;
+			overscroll-behavior-x: contain;
+			-webkit-overflow-scrolling: touch;
+		}
+
+		.photo-grid img {
+			flex: 0 0 min(520px, 82vw);
+			width: min(520px, 82vw);
+			aspect-ratio: 1 / 1;
+			object-fit: cover;
+			border-radius: 8px;
+			scroll-snap-align: start;
+		}
+
+		.photo-grid img:first-child {
+			max-height: none;
+		}
+
+		.gallery-placeholder {
+			min-height: 220px;
+			border-radius: 8px;
+			background: linear-gradient(135deg, #0486fe, #7f6749 58%, #25332e);
+		}
+
+		.variant-layout {
 			display: grid;
 			grid-template-columns: minmax(0, 1fr) 320px;
 			gap: 28px;
@@ -239,32 +284,35 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			padding-top: 24px;
 		}
 
-		.experience-layout .photo-grid {
-			grid-column: 1;
-			grid-row: 1;
-		}
-
-		.experience-layout aside {
-			grid-column: 2;
-			grid-row: 1 / span 2;
-		}
-
 		.detail-sidebar {
 			position: sticky;
 			top: 86px;
-			align-self: start;
 		}
 
-		.experience-layout article {
-			grid-column: 1;
-			grid-row: 2;
+		.title-block {
+			margin-bottom: 28px;
+		}
+
+		.title-block h1 {
+			color: #1f2420;
+		}
+
+		.page-lead--plain {
+			color: #555d54;
 		}
 
 		.stats {
 			display: flex;
 			flex-wrap: wrap;
 			gap: 8px;
-			margin-bottom: 18px;
+		}
+
+		.stats--plain {
+			margin-top: 20px;
+		}
+
+		.stats--plain > span {
+			font-weight: 600;
 		}
 
 		.stats > span,
@@ -285,15 +333,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			font-weight: 750;
 		}
 
-		.stats--hero {
-			margin-top: 24px;
-			margin-bottom: 0;
-		}
-
-		.stats--plain > span {
-			font-weight: 600;
-		}
-
 		.stats .stat-icon {
 			display: inline-grid;
 			place-items: center;
@@ -312,24 +351,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			width: 18px;
 			height: 18px;
 			fill: currentColor;
-		}
-
-		.photo-grid {
-			display: grid;
-			grid-template-columns: repeat(6, minmax(0, 1fr));
-			gap: 10px;
-		}
-
-		.photo-grid img {
-			width: 100%;
-			aspect-ratio: 16 / 9;
-			object-fit: cover;
-			border-radius: 8px;
-		}
-
-		.photo-grid img:first-child {
-			grid-column: span 2;
-			max-height: 190px;
 		}
 
 		.info-grid {
@@ -488,7 +509,12 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		}
 
 		@media (max-width: 860px) {
-			.experience-layout {
+			.gallery-first {
+				padding-top: 20px;
+				padding-bottom: 12px;
+			}
+
+			.variant-layout {
 				grid-template-columns: 1fr;
 				padding-top: 22px;
 				gap: 22px;
@@ -498,38 +524,14 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 				position: static;
 			}
 
-			.experience-layout .photo-grid,
-			.experience-layout aside,
-			.experience-layout article {
-				grid-column: auto;
-				grid-row: auto;
-			}
-
-			.photo-grid {
-				display: flex;
-				overflow-x: auto;
-				overflow-y: hidden;
-				gap: 10px;
-				width: 100%;
-				max-width: 100%;
-				padding-bottom: 6px;
-				scroll-snap-type: x proximity;
-				overscroll-behavior-x: contain;
-				-webkit-overflow-scrolling: touch;
-			}
-
 			.photo-grid img,
 			.photo-grid img:first-child {
-				flex: 0 0 calc((100% - 20px) / 2.5);
-				width: calc((100% - 20px) / 2.5);
+				flex-basis: min(82vw, 360px);
+				width: min(82vw, 360px);
 				height: auto;
-				max-height: none;
-				aspect-ratio: 4 / 3;
-				scroll-snap-align: start;
+				aspect-ratio: 1 / 1;
 			}
-		}
 
-		@media (max-width: 860px) {
 			.excursion-bottom-cta {
 				display: flex;
 				gap: 10px;

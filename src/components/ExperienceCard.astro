@@ -1,9 +1,53 @@
 ---
 import { experienceHref, type ExperienceRow } from "../lib/travel-db.js";
 
-const { experience } = Astro.props;
+const { experience, showCity = true } = Astro.props;
 
 const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
+const formatDuration = (value: number | string | null | undefined) => {
+	const duration = String(value ?? "").trim().replace(/\s*ч\.?$/i, "");
+	return duration.replace(/([.,]\d*?)0+$/, "$1").replace(/[.,]$/, "");
+};
+const typeLabels: Record<string, string> = {
+	private: "Индивидуальная",
+	individual: "Индивидуальная",
+	group: "Групповая",
+	mini_group: "Мини-группа",
+	"mini-group": "Мини-группа",
+	minigroup: "Мини-группа",
+	small_group: "Мини-группа",
+	"small-group": "Мини-группа",
+};
+const movementLabels: Record<string, string> = {
+	foot: "пешком",
+	car: "на машине",
+	bus: "на автобусе",
+	museum: "в музее",
+	motorship: "на теплоходе",
+	speedboat: "на катере",
+	boat: "на лодке",
+	yacht: "на яхте",
+	sailing: "на яхте",
+	bicycle: "на велосипеде",
+	other: "другое",
+};
+const formatLabels: Record<string, string> = {
+	waterwalk: "на воде",
+	quest: "квест",
+	photosession: "фотосессия",
+	activity: "активность",
+	master_class: "мастер-класс",
+	audioguide: "аудиогид",
+	ticket: "билет",
+};
+const labelFor = (labels: Record<string, string>, value: string | null | undefined) => {
+	const key = String(value ?? "").trim().toLowerCase();
+	return key ? labels[key] : null;
+};
+const badgeLabel = [
+	labelFor(typeLabels, experience.type),
+	labelFor(movementLabels, experience.movement_type) ?? labelFor(formatLabels, experience.format),
+].filter(Boolean).join(" ∙ ");
 const formatPrice = (item: ExperienceRow) => {
 	if (item.price_value_string) return item.price_value_string;
 	if (!item.price_value) return null;
@@ -33,13 +77,15 @@ const formatPrice = (item: ExperienceRow) => {
 					<img src={experience.image_url} alt="" loading="lazy" />
 				)
 			}
+			{badgeLabel && <span class="experience-card__badge">{badgeLabel}</span>}
 		</div>
 		<div class="experience-card__body">
 			<div class="experience-card__meta">
-				{experience.rating && <span>★ {experience.rating}</span>}
+				{experience.duration && <span><span class="experience-card__meta-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm1 3v5.1l3.4 2-1 1.7L11 13.2V7h2Z" /></svg></span>{formatDuration(experience.duration)} ч.</span>}
+				{experience.rating && <span><span class="experience-card__meta-icon" aria-hidden="true">★</span>{experience.rating}</span>}
 				{
 					experience.review_count && (
-						<span>{formatCount(experience.review_count)} отзывов</span>
+						<span><span class="experience-card__meta-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5h16v10H9.2L4 19.5v-14Zm2 2v8l2.5-2H18v-6H6Z" /><path d="M8.5 10.5a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Z" /></svg></span>{formatCount(experience.review_count)} отзывов</span>
 					)
 				}
 			</div>
@@ -47,7 +93,7 @@ const formatPrice = (item: ExperienceRow) => {
 			{experience.tagline && <p>{experience.tagline}</p>}
 			<div class="experience-card__footer">
 				{formatPrice(experience) && <strong>{formatPrice(experience)}</strong>}
-				{experience.city_name && <span>{experience.city_name}</span>}
+				{showCity && experience.city_name && <span>{experience.city_name}</span>}
 			</div>
 		</div>
 	</a>
@@ -70,10 +116,11 @@ const formatPrice = (item: ExperienceRow) => {
 	}
 
 	.experience-card__media {
+		position: relative;
 		height: 210px;
 		background:
 			linear-gradient(135deg, rgba(49, 93, 99, 0.9), rgba(127, 103, 73, 0.9)),
-			#315d63;
+			#0486fe;
 		overflow: hidden;
 	}
 
@@ -82,6 +129,29 @@ const formatPrice = (item: ExperienceRow) => {
 		height: 100%;
 		object-fit: cover;
 		display: block;
+	}
+
+	.experience-card__media::after {
+		content: "";
+		position: absolute;
+		inset: 0 0 auto;
+		height: 42%;
+		background: linear-gradient(180deg, rgba(0, 0, 0, 0.48), rgba(0, 0, 0, 0));
+		pointer-events: none;
+	}
+
+	.experience-card__badge {
+		position: absolute;
+		top: 14px;
+		left: 14px;
+		z-index: 1;
+		max-width: calc(100% - 28px);
+		color: #fff;
+		font-size: 0.98rem;
+		line-height: 1.2;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.experience-card__body {
@@ -100,6 +170,27 @@ const formatPrice = (item: ExperienceRow) => {
 		align-items: center;
 		color: #687067;
 		font-size: 0.92rem;
+	}
+
+	.experience-card__meta span {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+	}
+
+	.experience-card__meta-icon {
+		display: inline-grid;
+		place-items: center;
+		width: 16px;
+		height: 16px;
+		color: #0486fe;
+		flex: 0 0 auto;
+	}
+
+	.experience-card__meta-icon svg {
+		width: 16px;
+		height: 16px;
+		fill: currentColor;
 	}
 
 	.experience-card h3 {
