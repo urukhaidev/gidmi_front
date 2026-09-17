@@ -138,8 +138,8 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 				<div class="stats stats--plain">
 					{experience.duration && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm1 3v5.1l3.4 2-1 1.7L11 13.2V7h2Z" /></svg></span>{formatDuration(experience.duration)} ч.</span>}
 					{experience.rating && <span><span class="stat-icon" aria-hidden="true">★</span>{experience.rating}</span>}
-					{experience.review_count && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5h16v10H9.2L4 19.5v-14Zm2 2v8l2.5-2H18v-6H6Z" /><path d="M8.5 10.5a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Z" /></svg></span>{formatCount(experience.review_count)} отзывов</span>}
-					{experience.max_persons && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.5 12a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7 0a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM2 20c.4-3.5 3-6 6.5-6s6.1 2.5 6.5 6H2Zm12.6-5.7c.4-.2.9-.3 1.4-.3 3 0 5.2 2.1 5.6 5H17c-.3-1.8-1.1-3.4-2.4-4.7Z" /></svg></span>до {experience.max_persons} человек</span>}
+					{experience.review_count && <span><span class="stat-icon" aria-hidden="true"><svg class="stat-icon--reviews" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v10H9.5L4 19.5v-14Z" /><path d="m12 14.6-3.1-2.9a2 2 0 0 1 2.8-2.8l.3.3.3-.3a2 2 0 0 1 2.8 2.8L12 14.6Z" /></svg></span>{formatCount(experience.review_count)} отз.</span>}
+					{experience.max_persons && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.5 12a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7 0a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM2 20c.4-3.5 3-6 6.5-6s6.1 2.5 6.5 6H2Zm12.6-5.7c.4-.2.9-.3 1.4-.3 3 0 5.2 2.1 5.6 5H17c-.3-1.8-1.1-3.4-2.4-4.7Z" /></svg></span>до {experience.max_persons} чел.</span>}
 				</div>
 			</div>
 
@@ -163,7 +163,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 		<aside class="detail-sidebar">
 			<div class="side-card">
-				{experience.price_value_string && <strong>{experience.price_value_string}</strong>}
+				{experience.price_value_string && <span class="side-card__price">{experience.price_value_string}</span>}
 				<a class="button" href={bookingUrl} target="_blank" rel="noopener">Выбрать дату</a>
 			</div>
 			{
@@ -325,38 +325,45 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		.stats > span {
 			display: inline-flex;
 			align-items: center;
-			gap: 8px;
-			min-height: 38px;
-			padding: 0 12px;
+			gap: 5px;
+			min-height: 28px;
+			padding: 0 6px;
 			color: #3f463f;
-			font-size: 0.96rem;
+			font-size: 0.78rem;
 			font-weight: 750;
 		}
 
 		.stats .stat-icon {
 			display: inline-grid;
 			place-items: center;
-			width: 18px;
-			height: 18px;
+			width: 14px;
+			height: 14px;
 			padding: 0;
 			border: 0;
 			color: #0486fe;
 			background: transparent;
-			font-size: 1rem;
+			font-size: 0.82rem;
 			line-height: 1;
 			flex: 0 0 auto;
 		}
 
 		.stats .stat-icon svg {
-			width: 18px;
-			height: 18px;
+			width: 14px;
+			height: 14px;
 			fill: currentColor;
+		}
+
+		.stats .stat-icon svg.stat-icon--reviews {
+			fill: none;
+			stroke: currentColor;
+			stroke-width: 1.6;
+			stroke-linecap: round;
+			stroke-linejoin: round;
 		}
 
 		.info-grid {
 			display: grid;
 			gap: 14px;
-			margin-top: 28px;
 		}
 
 		.info-grid div,
@@ -383,14 +390,18 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			box-shadow: 0 12px 34px rgba(31, 36, 32, 0.08);
 		}
 
-		.side-card strong {
+		.side-card__price {
 			font-size: 1.35rem;
+			font-weight: 400;
 		}
 
 		.side-card a {
 			color: #1f2420;
-			font-weight: 800;
 			text-decoration: none;
+		}
+
+		.side-card .button {
+			font-weight: 400;
 		}
 
 		.button {
@@ -539,6 +550,12 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		}
 
 		@media (max-width: 520px) {
+			.photo-grid img,
+			.photo-grid img:first-child {
+				flex-basis: 46vw;
+				width: 46vw;
+			}
+
 			.excursion-bottom-cta__price span {
 				font-size: 1rem;
 			}

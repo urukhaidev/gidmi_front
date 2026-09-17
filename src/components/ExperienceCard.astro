@@ -85,7 +85,7 @@ const formatPrice = (item: ExperienceRow) => {
 				{experience.rating && <span><span class="experience-card__meta-icon" aria-hidden="true">★</span>{experience.rating}</span>}
 				{
 					experience.review_count && (
-						<span><span class="experience-card__meta-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5h16v10H9.2L4 19.5v-14Zm2 2v8l2.5-2H18v-6H6Z" /><path d="M8.5 10.5a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Z" /></svg></span>{formatCount(experience.review_count)} отзывов</span>
+						<span><span class="experience-card__meta-icon" aria-hidden="true"><svg class="experience-card__meta-icon--reviews" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v10H9.5L4 19.5v-14Z" /><path d="m12 14.6-3.1-2.9a2 2 0 0 1 2.8-2.8l.3.3.3-.3a2 2 0 0 1 2.8 2.8L12 14.6Z" /></svg></span>{formatCount(experience.review_count)} отзывов</span>
 					)
 				}
 			</div>
@@ -191,6 +191,14 @@ const formatPrice = (item: ExperienceRow) => {
 		width: 16px;
 		height: 16px;
 		fill: currentColor;
+	}
+
+	.experience-card__meta-icon svg.experience-card__meta-icon--reviews {
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.6;
+		stroke-linecap: round;
+		stroke-linejoin: round;
 	}
 
 	.experience-card h3 {
