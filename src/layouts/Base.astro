@@ -360,10 +360,40 @@ const pageCtx = createPublicPageContext({
 				const header = document.querySelector(".site-header");
 				const toggles = Array.from(document.querySelectorAll("[data-header-toggle]"));
 				const panels = Array.from(document.querySelectorAll("[data-header-panel]"));
+				let lockedScrollY = 0;
+				let bodyLockStyles = null;
 
 				const syncScrollLock = () => {
 					const hasOpenPanel = panels.some((panel) => !panel.hidden);
-					document.documentElement.classList.toggle("site-header-lock-scroll", hasOpenPanel);
+					const isScrollLocked = document.documentElement.classList.contains("site-header-lock-scroll");
+
+					if (hasOpenPanel && !isScrollLocked) {
+						lockedScrollY = window.scrollY;
+						bodyLockStyles = {
+							position: document.body.style.position,
+							top: document.body.style.top,
+							left: document.body.style.left,
+							right: document.body.style.right,
+							width: document.body.style.width,
+						};
+						document.body.style.position = "fixed";
+						document.body.style.top = `-${lockedScrollY}px`;
+						document.body.style.left = "0";
+						document.body.style.right = "0";
+						document.body.style.width = "100%";
+						document.documentElement.classList.add("site-header-lock-scroll");
+					} else if (!hasOpenPanel && isScrollLocked) {
+						document.documentElement.classList.remove("site-header-lock-scroll");
+						if (bodyLockStyles) {
+							document.body.style.position = bodyLockStyles.position;
+							document.body.style.top = bodyLockStyles.top;
+							document.body.style.left = bodyLockStyles.left;
+							document.body.style.right = bodyLockStyles.right;
+							document.body.style.width = bodyLockStyles.width;
+							bodyLockStyles = null;
+						}
+						window.scrollTo(0, lockedScrollY);
+					}
 				};
 
 				const closePanels = (except) => {
