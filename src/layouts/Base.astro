@@ -62,6 +62,15 @@ const navItems = [
 	{ label: "Экскурсии", url: "/excursions" },
 ];
 
+const mobileNavItems = [
+	{ label: "Страны", url: "/countries" },
+	{ label: "Города", url: "/cities" },
+	{ label: "Избранное", url: "/favorites" },
+	{ label: "О нас", url: "/about" },
+	{ label: "Отзывы", url: "/reviews" },
+	{ label: "Помощь", url: "/help" },
+];
+
 const footerLinks = [
 	{ label: "Популярные экскурсии", url: "/excursions" },
 	{ label: "Страны", url: "/countries" },
@@ -248,7 +257,7 @@ const pageCtx = createPublicPageContext({
 				</div>
 				<div class="site-header__panel site-header__panel--menu" id="mobile-menu" hidden data-header-panel="menu">
 					{
-						navItems.map((item) => (
+						mobileNavItems.map((item) => (
 							<a href={item.url}>
 								{item.label}
 							</a>
@@ -348,8 +357,14 @@ const pageCtx = createPublicPageContext({
 		<EmDashBodyEnd page={pageCtx} />
 		<script is:inline>
 			(() => {
+				const header = document.querySelector(".site-header");
 				const toggles = Array.from(document.querySelectorAll("[data-header-toggle]"));
 				const panels = Array.from(document.querySelectorAll("[data-header-panel]"));
+
+				const syncScrollLock = () => {
+					const hasOpenPanel = panels.some((panel) => !panel.hidden);
+					document.documentElement.classList.toggle("site-header-lock-scroll", hasOpenPanel);
+				};
 
 				const closePanels = (except) => {
 					panels.forEach((panel) => {
@@ -361,10 +376,12 @@ const pageCtx = createPublicPageContext({
 						if (toggle.dataset.headerToggle === except) return;
 						toggle.setAttribute("aria-expanded", "false");
 					});
+					syncScrollLock();
 				};
 
 				toggles.forEach((toggle) => {
-					toggle.addEventListener("click", () => {
+					toggle.addEventListener("click", (event) => {
+						event.stopPropagation();
 						const target = toggle.dataset.headerToggle;
 						const panel = panels.find((item) => item.dataset.headerPanel === target);
 						if (!panel) return;
@@ -373,6 +390,7 @@ const pageCtx = createPublicPageContext({
 						closePanels(willOpen ? target : undefined);
 						panel.hidden = !willOpen;
 						toggle.setAttribute("aria-expanded", String(willOpen));
+						syncScrollLock();
 
 						if (willOpen && target === "search") {
 							window.requestAnimationFrame(() => {
@@ -382,8 +400,8 @@ const pageCtx = createPublicPageContext({
 					});
 				});
 
-				document.addEventListener("mousedown", (event) => {
-					if (event.target.closest(".site-header")) return;
+				document.addEventListener("click", (event) => {
+					if (header?.contains(event.target)) return;
 					closePanels();
 				});
 
@@ -400,15 +418,17 @@ const pageCtx = createPublicPageContext({
 	:global(:root) {
 		--site-gutter: 24px;
 		--site-content-max: 1200px;
+		--header-surface: #f9f9f9;
+		--header-backdrop-filter: blur(14px);
 	}
 
 	.site-header {
 		position: sticky;
 		top: 0;
 		z-index: 40;
-		border-bottom: 1px solid rgba(31, 36, 32, 0.1);
-		background: #fff;
-		backdrop-filter: blur(14px);
+		border-bottom: 1px solid rgba(31, 36, 32, 0.05);
+		background: var(--header-surface);
+		backdrop-filter: var(--header-backdrop-filter);
 	}
 
 	.site-header__nav {
@@ -749,16 +769,22 @@ const pageCtx = createPublicPageContext({
 		:global(:root) {
 			--site-gutter: 18px;
 			--site-content-max: 1200px;
+			--mobile-header-height: 63px;
+		}
+
+		:global(html.site-header-lock-scroll),
+		:global(html.site-header-lock-scroll body) {
+			overflow: hidden;
 		}
 
 		.site-header__nav {
 			grid-template-columns: minmax(0, 1fr) auto;
-			gap: 8px 10px;
-			padding: 7px var(--site-gutter);
+			gap: 10px 12px;
+			padding: 10px var(--site-gutter);
 		}
 
 		:global(.brand-link__mark) {
-			height: 32px !important;
+			height: 38px !important;
 		}
 
 		.site-header__links {
@@ -771,30 +797,30 @@ const pageCtx = createPublicPageContext({
 
 		.site-header__actions {
 			display: flex;
-			gap: 6px;
+			gap: 8px;
 			align-items: center;
 			justify-content: flex-end;
 		}
 
 		.site-header__icon {
-			width: 36px;
-			height: 36px;
+			width: 42px;
+			height: 42px;
 		}
 
 		.site-header__icon--menu span,
 		.site-header__icon--menu::before,
 		.site-header__icon--menu::after {
-			width: 16px;
+			width: 19px;
 		}
 
 		.site-header__icon--search svg {
-			width: 20px;
-			height: 20px;
+			width: 22px;
+			height: 22px;
 		}
 
 		.site-header__panel {
-			position: absolute;
-			top: 100%;
+			position: fixed;
+			top: calc(var(--mobile-header-height) - 1px);
 			left: 0;
 			right: 0;
 			z-index: 45;
@@ -806,61 +832,66 @@ const pageCtx = createPublicPageContext({
 
 		.site-header__panel--menu {
 			display: none;
-			padding: 10px 18px;
+			box-sizing: border-box;
+			height: calc(100dvh - var(--mobile-header-height) + 1px);
+			overflow-y: auto;
+			padding: 12px 18px;
 			border: 0;
-			border-top: 1px solid rgba(31, 36, 32, 0.1);
 			border-radius: 0;
 			background: #fff;
-			box-shadow: 0 18px 50px rgba(31, 36, 32, 0.16);
+			backdrop-filter: none;
+			box-shadow: none;
 		}
 
 		.site-header__panel--menu:not([hidden]) {
 			display: grid;
-			grid-template-columns: repeat(3, minmax(0, 1fr));
-			gap: 6px;
+			grid-template-columns: 1fr;
+			align-content: start;
+			gap: 2px;
 		}
 
 		.site-header__panel--menu a {
-			display: inline-flex;
+			display: flex;
 			align-items: center;
 			justify-content: center;
-			min-height: 36px;
-			padding: 0 8px;
-			border: 1px solid rgba(31, 36, 32, 0.12);
-			border-radius: 8px;
+			min-height: 48px;
+			padding: 0;
+			border: 0;
+			border-radius: 0;
 			color: #1f2420;
-			background: #fff;
-			font-size: 0.88rem;
+			background: transparent;
+			font-size: 1.08rem;
+			font-weight: 600;
+			text-align: center;
 			text-decoration: none;
 		}
 
 		.site-header__panel--menu a:hover {
-			border-color: #0486fe;
-			color: #fff;
-			background: #0486fe;
+			color: #0486fe;
 		}
 
 		.site-header__panel--search {
 			display: none;
 			padding: 14px 18px 28px;
 			border: 0;
-			border-top: 1px solid rgba(31, 36, 32, 0.1);
 			border-radius: 0;
 			background: #fff;
-			box-shadow: 0 18px 50px rgba(31, 36, 32, 0.16);
-			max-height: calc(100dvh - 66px);
+			backdrop-filter: none;
+			box-shadow: none;
+			height: calc(100dvh - var(--mobile-header-height) + 1px);
+			max-height: none;
 			overflow-y: auto;
 		}
 
 		.site-header__panel--search:not([hidden]) {
 			display: grid;
-			gap: 26px;
+			gap: 14px;
 		}
 
 		.site-header__popular {
 			display: grid;
 			gap: 18px;
-			padding: 8px 0 0;
+			padding: 0;
 			border: 0;
 			border-radius: 0;
 			background: #fff;

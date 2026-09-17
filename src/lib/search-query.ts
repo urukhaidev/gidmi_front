@@ -15,7 +15,6 @@ export async function searchTravel(
 	const pattern = `%${normalized}%`;
 	const countrySearchText = "(coalesce(c.name_ru, '') || ' ' || coalesce(c.name_en, ''))";
 	const citySearchText = "(coalesce(c.name_ru, '') || ' ' || coalesce(c.name_en, ''))";
-	const tagSearchText = "(coalesce(cat.main_name, '') || ' ' || coalesce(cat.sub_name, '') || ' ' || coalesce(cat.title, '') || ' ' || coalesce(cat.header, '') || ' ' || coalesce(cat.main_slug, '') || ' ' || coalesce(cat.sub_slug, '') || ' ' || coalesce(array_to_string(cat.lexical_triggers, ' '), ''))";
 	const experienceSearchText = "e.title";
 
 	return query<SearchResultRow>(
@@ -82,7 +81,14 @@ export async function searchTravel(
 			inner join experiences tagged_experience on tagged_experience.id = etn.experience_id
 			inner join cities city on city.id = tagged_experience.city_id
 			left join countries country on country.id = city.country_id
-			where lower(${tagSearchText}) like lower($1)
+			where
+				cat.main_name ilike $1
+				or cat.sub_name ilike $1
+				or cat.title ilike $1
+				or cat.header ilike $1
+				or cat.main_slug ilike $1
+				or cat.sub_slug ilike $1
+				or array_to_string(cat.lexical_triggers, ' ') ilike $1
 			group by
 				cat.id,
 				cat.sub_name,

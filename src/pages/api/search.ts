@@ -8,14 +8,15 @@ import {
 	searchTravel,
 } from "../../lib/travel-db.js";
 
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ url, request }) => {
 	const q = url.searchParams.get("q") ?? "";
 
-	if (q.trim().length < 2) {
+	if (q.trim().length < 3) {
 		return Response.json({ results: [] });
 	}
 
 	const { rows: rawRows, error } = await searchTravel(q, 12);
+	if (request.signal.aborted) return new Response(null, { status: 204 });
 
 	if (error) {
 		return Response.json({ results: [], error }, { status: 502 });
@@ -32,13 +33,14 @@ export const GET: APIRoute = async ({ url }) => {
 	const cityId = city?.id ?? categoryCityId ?? experienceCityId;
 	const isCategorySearch = !city && Boolean(category);
 	const isExperienceSearch = !city && Boolean(experience);
-	const cityDetails = cityId
+	const cityDetails = cityId && !request.signal.aborted
 		? await Promise.all([
 			getCity(cityId),
 			getCitySearchCategories(cityId, 6),
 			getCitySearchExperiences(cityId, 6),
 		])
 		: null;
+	if (request.signal.aborted) return new Response(null, { status: 204 });
 	const cityRow = cityDetails?.[0].rows[0] ?? null;
 	const cityExperienceCount = cityRow?.experience_count ?? city?.count ?? 0;
 	const cityTitle = cityRow?.name ?? city?.title;

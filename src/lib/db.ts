@@ -6,6 +6,16 @@ const { Pool } = pg;
 
 let pool: InstanceType<typeof Pool> | null = null;
 
+type CachedQueryResult = {
+	expiresAt: number;
+	result: QueryResult<unknown>;
+};
+
+const queryCache = new Map<string, CachedQueryResult>();
+const pendingQueries = new Map<string, Promise<QueryResult<unknown>>>();
+const QUERY_CACHE_TTL_MS = 120_000;
+const QUERY_CACHE_MAX_ENTRIES = 300;
+
 function getPool(): InstanceType<typeof Pool> | null {
 	const connectionString: string | undefined =
 		(import.meta.env as Record<string, string | undefined>).SUPABASE_DATABASE_URL ??
@@ -19,6 +29,7 @@ function getPool(): InstanceType<typeof Pool> | null {
 			ssl: { rejectUnauthorized: false },
 			min: 0,
 			max: 5,
+			keepAlive: true,
 		});
 	}
 
@@ -60,13 +71,49 @@ export async function query<T = Record<string, unknown>>(
 		return { rows: [], error: "SUPABASE_DATABASE_URL is not configured" };
 	}
 
+	const cacheable = /^\s*(select|with)\b/i.test(sql);
+	const cacheKey = cacheable ? `${sql}\u0000${JSON.stringify(params)}` : null;
+	const now = Date.now();
+
+	if (cacheKey) {
+		const cached = queryCache.get(cacheKey);
+		if (cached && cached.expiresAt > now) {
+			return cached.result as QueryResult<T>;
+		}
+
+		const pending = pendingQueries.get(cacheKey);
+		if (pending) return pending as Promise<QueryResult<T>>;
+	}
+
+	const execute = async (): Promise<QueryResult<T>> => {
+		try {
+			const result = await db.query(sql, params);
+			return { rows: result.rows as T[], error: null };
+		} catch (error) {
+			return {
+				rows: [],
+				error: error instanceof Error ? error.message : String(error),
+			};
+		}
+	};
+
+	const request = execute();
+	if (cacheKey) pendingQueries.set(cacheKey, request as Promise<QueryResult<unknown>>);
+
 	try {
-		const result = await db.query(sql, params);
-		return { rows: result.rows as T[], error: null };
-	} catch (error) {
-		return {
-			rows: [],
-			error: error instanceof Error ? error.message : String(error),
-		};
+		const response = await request;
+		if (cacheKey && !response.error) {
+			if (queryCache.size >= QUERY_CACHE_MAX_ENTRIES) {
+				const oldestKey = queryCache.keys().next().value;
+				if (oldestKey) queryCache.delete(oldestKey);
+			}
+			queryCache.set(cacheKey, {
+				expiresAt: Date.now() + QUERY_CACHE_TTL_MS,
+				result: response as QueryResult<unknown>,
+			});
+		}
+		return response;
+	} finally {
+		if (cacheKey) pendingQueries.delete(cacheKey);
 	}
 }

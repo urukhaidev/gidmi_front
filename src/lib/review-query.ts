@@ -21,9 +21,46 @@ const reviewJoins = `
 	left join cities city on city.id = e.city_id
 	left join countries country on country.id = e.country_id`;
 
+// Keep all timestamp values in an explicit timezone. Besides making the
+// ordering deterministic, this expression can be backed by an index.
+const reviewOrderTimestamp = `coalesce(
+	r.created_at at time zone 'UTC',
+	r.created_on_dt,
+	r.created_on::timestamp
+)`;
+
 export async function getReviews(
 	filters: ReviewFilters = {},
 ): Promise<QueryResult<ReviewRow>> {
+	// City pages need only a few recent reviews. With city_id denormalized on
+	// reviews, PostgreSQL can fetch those rows from one ordered index instead
+	// of collecting and sorting every review for every excursion in the city.
+	if (filters.cityId && !filters.categoryId && !filters.experienceId) {
+		const limit = filters.limit ?? 6;
+
+		return query<ReviewRow>(
+			`
+			with recent_reviews as (
+				select r.*
+				from experience_reviews r
+				where r.city_id = $1
+					and nullif(trim(coalesce(r.text, '')), '') is not null
+				order by
+					${reviewOrderTimestamp} desc nulls last,
+					r.id desc
+				limit $2
+			)
+			select ${reviewColumns}
+			from recent_reviews r
+			${reviewJoins}
+			order by
+				${reviewOrderTimestamp} desc nulls last,
+				r.id desc
+			`,
+			[Number(filters.cityId), limit],
+		);
+	}
+
 	const where = ["nullif(trim(coalesce(r.text, '')), '') is not null"];
 	const params: unknown[] = [];
 	const extraJoins: string[] = [];
@@ -56,7 +93,7 @@ export async function getReviews(
 		${reviewJoins}
 		where ${where.join(" and ")}
 		order by
-			coalesce(r.created_at, r.created_on_dt::timestamptz, r.created_on::timestamptz) desc nulls last,
+			${reviewOrderTimestamp} desc nulls last,
 			r.id desc
 		limit $${params.length}
 		`,

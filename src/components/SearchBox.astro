@@ -145,6 +145,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 		let activeIndex = -1;
 		let timer: number | undefined;
 		let controller: AbortController | null = null;
+		let requestVersion = 0;
 
 		const close = () => {
 			list.hidden = true;
@@ -297,9 +298,10 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 		const search = (value: string) => {
 			window.clearTimeout(timer);
 			controller?.abort();
+			const version = ++requestVersion;
 
 			const query = value.trim();
-			if (query.length < 2) {
+			if (query.length < 3) {
 				results = [];
 				citySearch = null;
 				setLoading(false);
@@ -310,11 +312,12 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 			setLoading(true);
 
 			timer = window.setTimeout(async () => {
-				controller = new AbortController();
+				const requestController = new AbortController();
+				controller = requestController;
 
 				try {
 					const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
-						signal: controller.signal,
+						signal: requestController.signal,
 						headers: { Accept: "application/json" },
 					});
 
@@ -324,26 +327,28 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 						results?: SearchResult[];
 						citySearch?: CitySearch;
 					};
-					results = data.results ?? [];
-					citySearch = data.citySearch ?? null;
-					activeIndex = -1;
-					render();
+					if (version === requestVersion) {
+						results = data.results ?? [];
+						citySearch = data.citySearch ?? null;
+						activeIndex = -1;
+						render();
+					}
 				} catch (error) {
-					if (!controller.signal.aborted) {
+					if (!requestController.signal.aborted && version === requestVersion) {
 						results = [];
 						citySearch = null;
 						list.innerHTML = `<li class="ts-empty">Поиск временно недоступен.</li>`;
 						open();
 					}
 				} finally {
-					if (!controller.signal.aborted) setLoading(false);
+					if (!requestController.signal.aborted && version === requestVersion) setLoading(false);
 				}
-			}, 120);
+			}, 350);
 		};
 
 		input.addEventListener("input", () => search(input.value));
 		input.addEventListener("focus", () => {
-			if (input.value.trim().length >= 2 && list.innerHTML) open();
+			if (input.value.trim().length >= 3 && list.innerHTML) open();
 		});
 
 		form.addEventListener("submit", (event) => {
@@ -360,7 +365,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 			}
 
 			const query = input.value.trim();
-			if (query.length < 2) {
+			if (query.length < 3) {
 				input.focus();
 				return;
 			}
