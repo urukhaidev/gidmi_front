@@ -72,6 +72,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 		url: string;
 		image_url: string | null;
 		count: number;
+		city_name?: string | null;
 	};
 
 	type CitySearchItem = {
@@ -168,7 +169,14 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 			index: number,
 		) => {
 			const isActive = index === activeIndex;
-			const image = `<span class="ts-item__image ts-item__image--empty" aria-hidden="true">${escapeHtml(item.title.slice(0, 1))}</span>`;
+			const place = item.city_name?.trim();
+			const title = place && (item.type === "category" || item.type === "experience")
+				? `${item.title} / ${place}`
+				: item.title;
+			const metaParts = [
+				typeLabels[item.type],
+				`${formatCount(item.count)} ${countLabels[item.type]}`,
+			];
 
 			return `
 				<li
@@ -178,10 +186,9 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 					aria-selected="${isActive ? "true" : "false"}"
 					data-search-index="${index}"
 				>
-					${image}
 					<span class="ts-item__content">
-						<span class="ts-item__title">${escapeHtml(item.title)}</span>
-						<span class="ts-item__meta">${escapeHtml(typeLabels[item.type])} · ${formatCount(item.count)} ${escapeHtml(countLabels[item.type])}</span>
+						<span class="ts-item__title">${escapeHtml(title)}</span>
+						<span class="ts-item__meta">${escapeHtml(metaParts.join(" · "))}</span>
 					</span>
 				</li>
 			`;
@@ -202,9 +209,6 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 							.map((item) => {
 								const index = registerItem(item);
 								const isActive = index === activeIndex;
-								const image = kind === "experience"
-									? `<span class="ts-mini__image ts-mini__image--empty" aria-hidden="true">${escapeHtml(item.title.slice(0, 1))}</span>`
-									: "";
 
 								return `
 									<div
@@ -214,7 +218,6 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 										aria-selected="${isActive ? "true" : "false"}"
 										data-search-index="${index}"
 									>
-										${image}
 										<span class="ts-mini__content">
 											<span class="ts-mini__title">${escapeHtml(item.title)}</span>
 											<span class="ts-mini__meta">${formatCount(item.count)} ${kind === "category" ? "экскурсий" : "отзывов"}</span>
@@ -453,8 +456,9 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 	}
 
 	.ts-input-row {
+		position: relative;
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto auto;
+		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
 		padding: 8px;
 		border: 1px solid rgba(255, 255, 255, 0.22);
@@ -469,8 +473,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 	}
 
 	.ts-wrap--header .ts-input-row {
-		position: relative;
-		grid-template-columns: 18px minmax(0, 1fr) auto;
+		grid-template-columns: 18px minmax(0, 1fr);
 		column-gap: 8px;
 		padding: 3px;
 		border-color: rgba(31, 36, 32, 0.12);
@@ -502,7 +505,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 		min-width: 0;
 		height: 52px;
 		border: 0;
-		padding: 0 18px;
+		padding: 0 48px 0 18px;
 		color: #1f2420;
 		background: transparent;
 		font-family: inherit;
@@ -542,7 +545,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 	.ts-wrap--header .ts-input-row input[type="search"] {
 		grid-column: 2;
 		height: 38px;
-		padding: 0 8px 0 0;
+		padding: 0 30px 0 0;
 		font-size: 0.92rem;
 	}
 
@@ -554,21 +557,26 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 	}
 
 	.ts-wrap--header .ts-spinner {
-		grid-column: 3;
 		width: 16px;
 		height: 16px;
-		margin-right: 8px;
 		border-width: 2px;
 	}
 
 	.ts-spinner {
+		position: absolute;
+		top: calc(50% - 11px);
+		right: 76px;
 		width: 22px;
 		height: 22px;
-		margin-right: 14px;
 		border: 3px solid rgba(31, 115, 201, 0.18);
 		border-top-color: #0486fe;
 		border-radius: 50%;
 		animation: ts-spin 0.6s linear infinite;
+	}
+
+	.ts-wrap--header .ts-spinner {
+		top: calc(50% - 8px);
+		right: 10px;
 	}
 
 	.ts-spinner[hidden],
@@ -609,11 +617,10 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 
 	.ts-item {
 		display: grid;
-		grid-template-columns: 54px minmax(0, 1fr);
-		gap: 10px;
+		grid-template-columns: minmax(0, 1fr);
 		align-items: center;
 		min-height: 56px;
-		padding: 6px 8px;
+		padding: 8px 10px;
 		border-radius: 8px;
 		cursor: pointer;
 		transition: background 0.1s;
@@ -622,23 +629,6 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 	.ts-item:hover,
 	.ts-item--active {
 		background: #f4f3ef;
-	}
-
-	.ts-item__image {
-		display: grid;
-		place-items: center;
-		width: 46px;
-		height: 42px;
-		border-radius: 6px;
-		background: #0486fe;
-		color: #fff;
-		object-fit: cover;
-		font-weight: 850;
-	}
-
-	.ts-item__image--empty {
-		background: #ece8dd;
-		color: #0486fe;
 	}
 
 	.ts-item__content {
@@ -706,30 +696,9 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 		cursor: pointer;
 	}
 
-	.ts-mini--experience {
-		grid-template-columns: 46px minmax(0, 1fr);
-	}
-
 	.ts-mini:hover,
 	.ts-mini--active {
 		background: #f4f3ef;
-	}
-
-	.ts-mini__image {
-		display: grid;
-		place-items: center;
-		width: 46px;
-		height: 40px;
-		border-radius: 6px;
-		background: #0486fe;
-		color: #fff;
-		object-fit: cover;
-		font-weight: 850;
-	}
-
-	.ts-mini__image--empty {
-		background: #ece8dd;
-		color: #0486fe;
 	}
 
 	.ts-mini__content {
@@ -751,7 +720,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 	.ts-mini__meta {
 		overflow: hidden;
 		color: #687067;
-		font-size: 0.82rem;
+		font-size: 0.9rem;
 		font-weight: 650;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -784,7 +753,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 
 		.ts-input-row input[type="search"] {
 			height: 46px;
-			padding: 0 12px;
+			padding: 0 42px 0 12px;
 			font-size: 1rem;
 		}
 
@@ -799,18 +768,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 		}
 
 		.ts-wrap--header .ts-input-row {
-			grid-template-columns: 18px minmax(0, 1fr) auto;
-		}
-
-		.ts-spinner {
-			grid-row: 1;
-			grid-column: 2;
-			margin-right: 84px;
-		}
-
-		.ts-wrap--header .ts-spinner {
-			grid-column: 3;
-			margin-right: 8px;
+			grid-template-columns: 18px minmax(0, 1fr);
 		}
 
 		.ts-dropdown {

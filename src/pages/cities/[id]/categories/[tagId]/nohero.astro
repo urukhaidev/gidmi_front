@@ -1,0 +1,8 @@
+---
+const { id, tagId } = Astro.params;
+const rewriteParams = new URLSearchParams(Astro.url.searchParams);
+rewriteParams.set("__root", "1");
+rewriteParams.set("__variant", "nohero");
+
+return Astro.rewrite(`/cities/${id}/categories/${tagId}?${rewriteParams.toString()}`);
+---

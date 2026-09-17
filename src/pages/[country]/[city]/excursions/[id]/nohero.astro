@@ -1,0 +1,552 @@
+---
+import Base from "../../../../../layouts/Base.astro";
+import ExperienceCard from "../../../../../components/ExperienceCard.astro";
+import ReviewList from "../../../../../components/ReviewList.astro";
+import TravelPageStyles from "../../../../../components/TravelPageStyles.astro";
+import {
+	cityHref,
+	countryHref,
+	getExperience,
+	getExperiencePhotos,
+	getExperiences,
+	getReviews,
+	experienceHref,
+} from "../../../../../lib/travel-db.js";
+
+const { id: paramId } = Astro.params;
+const id = paramId ? paramId.split("-")[0] : "";
+
+const [experienceResult, photosResult, reviewsResult] = await Promise.all([
+	getExperience(id),
+	getExperiencePhotos(id),
+	getReviews({ experienceId: id, limit: 8 }),
+]);
+const experience = experienceResult.rows[0];
+
+if (!experience) {
+	return Astro.redirect("/404");
+}
+
+const canonicalPath = experienceHref(experience);
+const variantPath = `${canonicalPath}/nohero`;
+if (Astro.url.pathname !== variantPath) {
+	return Astro.redirect(`${variantPath}${Astro.url.search}`, 301);
+}
+
+const searchCity = experience.city_id
+	? {
+		id: experience.city_id,
+		name: experience.city_name,
+		slug: experience.city_slug,
+		country_slug: experience.country_slug,
+		country_url: experience.country_url,
+		in_obj_phrase: experience.city_in_obj_phrase,
+	}
+	: null;
+
+const relatedResult = await getExperiences({
+	limit: 5,
+	cityId: experience.city_id,
+});
+const related = relatedResult.rows.filter((item) => item.id !== experience.id).slice(0, 4);
+const photos = photosResult.rows.filter((item) => item.image_url);
+const reviews = reviewsResult.rows;
+const heroImage = experience.image_url ?? photos[0]?.image_url;
+const galleryPhotos = photos.length > 0 ? photos : heroImage ? [{ id: experience.id, position: 0, image_url: heroImage }] : [];
+const displayedGalleryPhotos = galleryPhotos.length > 0
+	? Array.from({ length: 5 }, (_, index) => galleryPhotos[index % galleryPhotos.length])
+	: [];
+const countryUrl = experience.country_name
+	? countryHref({ id: experience.country_id, slug: experience.country_slug, url: experience.country_url })
+	: null;
+const cityUrl = experience.city_name
+	? cityHref({
+		id: experience.city_id,
+		slug: experience.city_slug,
+		country_slug: experience.country_slug,
+		country_url: experience.country_url,
+	})
+	: null;
+const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
+const formatDuration = (value: number | string | null | undefined) => {
+	const duration = String(value ?? "").trim().replace(/\s*ч\.?$/i, "");
+	return duration.replace(/([.,]\d*?)0+$/, "$1").replace(/[.,]$/, "");
+};
+const cleanText = (value: string | null | undefined) =>
+	String(value ?? "")
+		.replace(/<[^>]*>/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+const description =
+	experience.annotation ??
+	experience.tagline ??
+	(cleanText(experience.description_new_html || experience.description_html) || "Экскурсия с гидом.");
+const bookingUrl = `https://experience.tripster.ru/mfs/experience/booking/${experience.id}/`;
+const bookingPrice = (experience.price_value_string || "Цена по запросу").replace(/\s*за\s+группу\.?$/i, "");
+const personLabel = (value: number | string | null | undefined) => {
+	const count = Number(value ?? 0);
+	const mod10 = count % 10;
+	const mod100 = count % 100;
+
+	if (mod10 === 1 && mod100 !== 11) return "человека";
+	return "человек";
+};
+const bookingGroupLabel = experience.max_persons
+	? `за группу до ${experience.max_persons} ${personLabel(experience.max_persons)}`
+	: "за группу";
+const guideName = experience.guide_name || "Гид";
+const hasGuide = Boolean(
+	experience.guide_name ||
+	experience.guide_avatar ||
+	experience.guide_rating ||
+	experience.guide_review_count,
+);
+
+Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=120");
+---
+
+<Base title={experience.title} description={description} image={heroImage} searchCity={searchCity ?? undefined}>
+	<TravelPageStyles />
+
+	<section class="section gallery-first">
+		{
+			displayedGalleryPhotos.length > 0 ? (
+				<div class="photo-grid photo-grid--top">
+					{displayedGalleryPhotos.map((photo) => (
+						<img src={photo.image_url} alt="" loading="lazy" />
+					))}
+				</div>
+			) : (
+				<div class="gallery-placeholder"></div>
+			)
+		}
+
+		<nav class="gallery-breadcrumbs" aria-label="Хлебные крошки">
+			<a href="/">Гидми</a>
+			{countryUrl && <span>/</span>}
+			{countryUrl && <a href={countryUrl}>{experience.country_name}</a>}
+			{cityUrl && <span>/</span>}
+			{cityUrl && <a href={cityUrl}>{experience.city_name}</a>}
+		</nav>
+	</section>
+
+	<section class="section variant-layout">
+		<article class="variant-main">
+			<div class="title-block">
+				<h1>{experience.title}</h1>
+				{experience.tagline && <p class="page-lead page-lead--plain">{experience.tagline}</p>}
+				<div class="stats stats--plain">
+					{experience.duration && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm1 3v5.1l3.4 2-1 1.7L11 13.2V7h2Z" /></svg></span>{formatDuration(experience.duration)} ч.</span>}
+					{experience.rating && <span><span class="stat-icon" aria-hidden="true">★</span>{experience.rating}</span>}
+					{experience.review_count && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5h16v10H9.2L4 19.5v-14Zm2 2v8l2.5-2H18v-6H6Z" /><path d="M8.5 10.5a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Zm3.4 0a1.2 1.2 0 1 1 2.4 0 1.2 1.2 0 0 1-2.4 0Z" /></svg></span>{formatCount(experience.review_count)} отзывов</span>}
+					{experience.max_persons && <span><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.5 12a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7 0a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM2 20c.4-3.5 3-6 6.5-6s6.1 2.5 6.5 6H2Zm12.6-5.7c.4-.2.9-.3 1.4-.3 3 0 5.2 2.1 5.6 5H17c-.3-1.8-1.1-3.4-2.4-4.7Z" /></svg></span>до {experience.max_persons} человек</span>}
+				</div>
+			</div>
+
+			{
+				(experience.description_new_html || experience.description_html) ? (
+					<div class="prose" set:html={experience.description_new_html || experience.description_html} />
+				) : (
+					description && <p class="prose">{description}</p>
+				)
+			}
+
+			<div class="info-grid">
+				{experience.meeting_point_text && <div><strong>Место встречи</strong><p>{experience.meeting_point_text}</p></div>}
+				{experience.finish_point_text && <div><strong>Финиш</strong><p>{experience.finish_point_text}</p></div>}
+				{experience.schedule_text && <div><strong>Расписание</strong><p>{experience.schedule_text}</p></div>}
+				{experience.additional_info && <div><strong>Дополнительно</strong><p>{experience.additional_info}</p></div>}
+				{experience.price_included_description && <div><strong>Включено</strong><p>{experience.price_included_description}</p></div>}
+				{experience.price_not_included_description && <div><strong>Не включено</strong><p>{experience.price_not_included_description}</p></div>}
+			</div>
+		</article>
+
+		<aside class="detail-sidebar">
+			<div class="side-card">
+				{experience.price_value_string && <strong>{experience.price_value_string}</strong>}
+				<a class="button" href={bookingUrl} target="_blank" rel="noopener">Выбрать дату</a>
+			</div>
+			{
+				hasGuide && (
+					<div class="side-card guide-side-card">
+						<h2>Гид</h2>
+						<div class="guide-side-card__profile">
+							<div class="guide-side-card__avatar" aria-hidden="true">
+								{experience.guide_avatar ? (
+									<img src={experience.guide_avatar} alt="" loading="lazy" />
+								) : (
+									<span>{guideName.slice(0, 1)}</span>
+								)}
+							</div>
+							<div>
+								<h3>{guideName}</h3>
+								<p>
+									{experience.guide_rating ? `★ ${experience.guide_rating}` : "Проводит экскурсию"}
+									{experience.guide_review_count ? ` · ${formatCount(experience.guide_review_count)} отзывов` : ""}
+								</p>
+							</div>
+						</div>
+					</div>
+				)
+			}
+		</aside>
+	</section>
+
+	<section class="section">
+		<div class="section__heading">
+			<h2>Отзывы путешественников</h2>
+		</div>
+		<ReviewList reviews={reviews} emptyText="Отзывы об этой экскурсии появятся после обновления данных." />
+	</section>
+
+	{
+		related.length > 0 && (
+			<section class="section">
+				<div class="section__heading">
+					<h2>Еще экскурсии рядом</h2>
+				</div>
+				<div class="grid">
+					{related.map((item) => <ExperienceCard experience={item} showCity={false} />)}
+				</div>
+			</section>
+		)
+	}
+
+	<div class="excursion-bottom-cta" role="region" aria-label="Бронирование экскурсии">
+		<div class="excursion-bottom-cta__price">
+			<span>{bookingPrice}</span>
+			<small>{bookingGroupLabel}</small>
+		</div>
+		<a class="excursion-bottom-cta__button" href={bookingUrl} target="_blank" rel="noopener">Выбрать дату</a>
+	</div>
+
+	<style>
+		:global(main) {
+			overflow: visible;
+		}
+
+		.gallery-first {
+			padding-top: 24px;
+			padding-bottom: 24px;
+		}
+
+		.gallery-breadcrumbs {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin: 16px 0 0;
+			color: #687067;
+			font-size: 0.94rem;
+		}
+
+		.gallery-breadcrumbs a {
+			color: inherit;
+			text-decoration: none;
+		}
+
+		.photo-grid {
+			display: flex;
+			overflow-x: auto;
+			overflow-y: hidden;
+			gap: 10px;
+			width: 100%;
+			max-width: 100%;
+			padding-bottom: 6px;
+			scroll-snap-type: x proximity;
+			overscroll-behavior-x: contain;
+			-webkit-overflow-scrolling: touch;
+		}
+
+		.photo-grid img {
+			flex: 0 0 min(520px, 82vw);
+			width: min(520px, 82vw);
+			aspect-ratio: 1 / 1;
+			object-fit: cover;
+			border-radius: 8px;
+			scroll-snap-align: start;
+		}
+
+		.photo-grid img:first-child {
+			max-height: none;
+		}
+
+		.gallery-placeholder {
+			min-height: 220px;
+			border-radius: 8px;
+			background: linear-gradient(135deg, #0486fe, #7f6749 58%, #25332e);
+		}
+
+		.variant-layout {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) 320px;
+			gap: 28px;
+			align-items: start;
+			padding-top: 24px;
+		}
+
+		.detail-sidebar {
+			position: sticky;
+			top: 86px;
+		}
+
+		.title-block {
+			margin-bottom: 28px;
+		}
+
+		.title-block h1 {
+			color: #1f2420;
+		}
+
+		.page-lead--plain {
+			color: #555d54;
+		}
+
+		.stats {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+		}
+
+		.stats--plain {
+			margin-top: 20px;
+		}
+
+		.stats--plain > span {
+			font-weight: 600;
+		}
+
+		.stats > span,
+		.side-card {
+			border: 1px solid rgba(31, 36, 32, 0.12);
+			border-radius: 8px;
+			background: #fff;
+		}
+
+		.stats > span {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			min-height: 38px;
+			padding: 0 12px;
+			color: #3f463f;
+			font-size: 0.96rem;
+			font-weight: 750;
+		}
+
+		.stats .stat-icon {
+			display: inline-grid;
+			place-items: center;
+			width: 18px;
+			height: 18px;
+			padding: 0;
+			border: 0;
+			color: #0486fe;
+			background: transparent;
+			font-size: 1rem;
+			line-height: 1;
+			flex: 0 0 auto;
+		}
+
+		.stats .stat-icon svg {
+			width: 18px;
+			height: 18px;
+			fill: currentColor;
+		}
+
+		.info-grid {
+			display: grid;
+			gap: 14px;
+			margin-top: 28px;
+		}
+
+		.info-grid div,
+		.side-card {
+			padding: 20px;
+		}
+
+		.info-grid div {
+			border-radius: 8px;
+			background: #fff;
+		}
+
+		.info-grid p,
+		.side-card p {
+			margin: 8px 0 0;
+			color: #555d54;
+			line-height: 1.55;
+		}
+
+		.side-card {
+			display: grid;
+			gap: 12px;
+			margin-bottom: 16px;
+			box-shadow: 0 12px 34px rgba(31, 36, 32, 0.08);
+		}
+
+		.side-card strong {
+			font-size: 1.35rem;
+		}
+
+		.side-card a {
+			color: #1f2420;
+			font-weight: 800;
+			text-decoration: none;
+		}
+
+		.button {
+			display: inline-flex;
+			justify-content: center;
+			padding: 13px 16px;
+			border-radius: 6px;
+			color: #fff !important;
+			background: #1f2420;
+		}
+
+		.side-card h2 {
+			margin: 0;
+			font-size: 1.2rem;
+		}
+
+		.guide-side-card__profile {
+			display: grid;
+			grid-template-columns: 56px minmax(0, 1fr);
+			gap: 14px;
+			align-items: center;
+		}
+
+		.guide-side-card__avatar {
+			display: grid;
+			place-items: center;
+			width: 56px;
+			height: 56px;
+			border-radius: 50%;
+			color: #fff;
+			background: #0486fe;
+			font-weight: 850;
+			overflow: hidden;
+		}
+
+		.guide-side-card__avatar img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		.guide-side-card h3 {
+			margin: 0;
+			font-size: 1rem;
+			line-height: 1.2;
+		}
+
+		.guide-side-card p {
+			margin: 6px 0 0;
+			color: #687067;
+			font-size: 0.94rem;
+			line-height: 1.35;
+		}
+
+		.excursion-bottom-cta {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			z-index: 1000;
+			box-sizing: border-box;
+			display: none;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			width: 100%;
+			max-width: 100%;
+			padding: 10px;
+			border-top: 1px solid rgba(31, 36, 32, 0.12);
+			background: rgba(255, 255, 255, 0.96);
+			box-shadow: 0 -12px 34px rgba(31, 36, 32, 0.12);
+			backdrop-filter: blur(16px);
+		}
+
+		.excursion-bottom-cta__price {
+			display: grid;
+			gap: 2px;
+			min-width: 0;
+		}
+
+		.excursion-bottom-cta__price span {
+			display: block;
+			font-size: 1.12rem;
+			line-height: 1.15;
+			color: #1f2420;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		.excursion-bottom-cta__price small {
+			display: block;
+			color: #687067;
+			font-size: 0.82rem;
+			line-height: 1.2;
+		}
+
+		.excursion-bottom-cta__button {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			box-sizing: border-box;
+			flex: 0 0 auto;
+			min-width: 156px;
+			min-height: 46px;
+			padding: 13px 16px;
+			border: 0;
+			border-radius: 6px;
+			color: #fff;
+			background: #1f2420;
+			font-size: 1rem;
+			line-height: 1;
+			text-align: center;
+			text-decoration: none;
+			white-space: nowrap;
+		}
+
+		@media (max-width: 860px) {
+			.gallery-first {
+				padding-top: 20px;
+				padding-bottom: 12px;
+			}
+
+			.variant-layout {
+				grid-template-columns: 1fr;
+				padding-top: 22px;
+				gap: 22px;
+			}
+
+			.detail-sidebar {
+				position: static;
+			}
+
+			.photo-grid img,
+			.photo-grid img:first-child {
+				flex-basis: min(82vw, 360px);
+				width: min(82vw, 360px);
+				height: auto;
+				aspect-ratio: 1 / 1;
+			}
+
+			.excursion-bottom-cta {
+				display: flex;
+				gap: 10px;
+			}
+		}
+
+		@media (max-width: 520px) {
+			.excursion-bottom-cta__price span {
+				font-size: 1rem;
+			}
+
+			.excursion-bottom-cta__button {
+				min-width: 132px;
+				padding-inline: 12px;
+			}
+		}
+	</style>
+</Base>

@@ -58,7 +58,7 @@ const currentPage = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1
 const [tagsResult, experiencesResult, statsResult, guidesResult, reviewsResult, seoResult] = await Promise.all([
 	isResultsRequest
 		? Promise.resolve({ rows: [], error: null })
-		: getCityTags(city.id, 80),
+		: getCityTags(city.id),
 	getExperiences({
 		limit: pageSize + 1,
 		offset: (currentPage - 1) * pageSize,
@@ -78,20 +78,65 @@ const [tagsResult, experiencesResult, statsResult, guidesResult, reviewsResult, 
 const tags = tagsResult.rows;
 const hasNextPage = experiencesResult.rows.length > pageSize;
 const experiences = experiencesResult.rows.slice(0, pageSize);
+const stats = statsResult.rows[0];
+const cityExperienceCount = stats?.count ?? city.experience_count;
 const hasActiveFilters =
 	currentSort !== "popular" ||
 	currentPersons !== "1" ||
 	currentFormat !== "any" ||
 	currentMovement !== "any" ||
 	currentPrice !== "any";
-const totalPagesFromCity = Math.max(1, Math.ceil(Number(city.experience_count ?? 0) / pageSize));
+const totalPagesFromCity = Math.max(1, Math.ceil(Number(cityExperienceCount ?? 0) / pageSize));
 const pageCount = hasActiveFilters
 	? currentPage + (hasNextPage ? 1 : 0)
 	: totalPagesFromCity;
-const stats = statsResult.rows[0];
 const guides = guidesResult.rows;
 const reviews = reviewsResult.rows;
 const seoBlock = seoResult.rows[0];
+const escapeHtml = (value: string) =>
+	value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+const formatTextHtml = (value: string) =>
+	value
+		.split(/\n{2,}/)
+		.map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+		.join("");
+const formatSeoBodyHtml = (value: string) =>
+	/<\/?[a-z][\s\S]*>/i.test(value) ? value : formatTextHtml(value);
+const seoBodyHtml = seoBlock?.body ? formatSeoBodyHtml(seoBlock.body) : null;
+type FaqItem = {
+	question: string;
+	answer: string;
+};
+const parseFaqItems = (value: string | null | undefined): FaqItem[] => {
+	if (!value) return [];
+
+	try {
+		const parsed = JSON.parse(value);
+		const items: unknown[] = Array.isArray(parsed)
+			? parsed
+			: Array.isArray(parsed?.items)
+				? parsed.items
+				: [];
+
+		return items
+			.map((item): FaqItem => {
+				const faqItem = item as Partial<FaqItem>;
+				return {
+					question: typeof faqItem.question === "string" ? faqItem.question.trim() : "",
+					answer: typeof faqItem.answer === "string" ? faqItem.answer.trim() : "",
+				};
+			})
+			.filter((item) => item.question && item.answer);
+	} catch {
+		return [];
+	}
+};
+const faqItems = parseFaqItems(seoBlock?.faq);
 
 const uniqueTags = (items: typeof tags) => {
 	const seen = new Set<string>();
@@ -114,23 +159,55 @@ const headerSuggestions = uniqueFilteredTags.slice(0, 10).map((tag) => ({
 
 const tagsByCategory = filteredTags.reduce((groups, tag) => {
 	const groupName = tag.group_name || tag.category || tag.tag_category || "Категории";
-	const termName = tag.term_name || "Разное";
-	const terms = groups.get(groupName) ?? new Map<string, typeof filteredTags>();
-	const termTags = terms.get(termName) ?? [];
-	if (!termTags.some((item) => item.id === tag.id)) {
-		termTags.push(tag);
+	const groupTags = groups.get(groupName) ?? [];
+	if (!groupTags.some((item) => item.id === tag.id)) {
+		groupTags.push(tag);
+		groupTags.sort(
+			(a, b) => b.experience_count - a.experience_count || a.name.localeCompare(b.name, "ru"),
+		);
 	}
-	terms.set(termName, termTags);
-	groups.set(groupName, terms);
+	groups.set(groupName, groupTags);
 	return groups;
-}, new Map<string, Map<string, typeof filteredTags>>());
+}, new Map<string, typeof filteredTags>());
 
 const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
 
 const cityPhrase = city.in_obj_phrase || `в ${city.name}`;
+const cityAcrossPhrase = city.across_obj_phrase || cityPhrase;
 const pageTitleText = `Экскурсии ${cityPhrase}`;
+const scheduleDate = new Intl.DateTimeFormat("ru-RU", {
+	day: "numeric",
+	month: "short",
+}).format(new Date()).replace(".", "");
+const scheduleItems = [
+	{
+		time: "14:30",
+		price: "7334 ₽",
+		title: `Главное ${cityPhrase}: набережные, площади, улицы`,
+	},
+	{
+		time: "14:30",
+		price: "11700 ₽",
+		title: `По главным храмам и монастырям ${city.name}`,
+	},
+	{
+		time: "14:30",
+		price: "7334 ₽",
+		title: `Другой ${city.name}: непарадные улицы, кварталы и истории`,
+	},
+	{
+		time: "14:55",
+		price: "8400 ₽",
+		title: `Водная прогулка и виды ${cityPhrase}`,
+	},
+	{
+		time: "15:00",
+		price: "7950 ₽",
+		title: `Тайны старого города ${cityPhrase}`,
+	},
+];
 const cityLead = excursionHeroLead({
-	count: stats?.count ?? city.experience_count,
+	count: cityExperienceCount,
 	placePhrase: cityPhrase,
 	minPriceValue: stats?.min_price_value,
 	minPriceCurrency: stats?.min_price_currency,
@@ -207,12 +284,50 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 				paginationItems={paginationItems}
 				pageHref={pageHref}
 			/>
-			<section class="section" data-seo-section>
-				<div class="section__heading">
-					<h2>{seoBlock?.h2 ?? "Заголовок"}</h2>
-				</div>
-				<div class="empty-card">{seoBlock?.body ?? "Текст"}</div>
-			</section>
+			{
+				seoBodyHtml && (
+					<section class="section" data-seo-section>
+						{seoBlock?.h2 && (
+							<div class="section__heading">
+								<h2>{seoBlock.h2}</h2>
+							</div>
+						)}
+						<div class="section-copy" set:html={seoBodyHtml} />
+						<div class="schedule-block">
+							<h3>Расписание экскурсий {cityAcrossPhrase}</h3>
+							<div class="schedule-list">
+								{scheduleItems.map((item) => (
+									<div class="schedule-row">
+										<div class="schedule-row__meta">
+											{scheduleDate}, {item.time} · {item.price}
+										</div>
+										<a href="#excursions">{item.title}</a>
+									</div>
+								))}
+							</div>
+						</div>
+					</section>
+				)
+			}
+			{
+				faqItems.length > 0 && (
+					<section class="section faq-section">
+						<div class="section__heading">
+							<h2>Вопросы и ответы</h2>
+						</div>
+						<div class="faq-list">
+							{faqItems.map((item) => (
+								<details class="faq-item">
+									<summary>{item.question}</summary>
+									<div class="faq-item__answer">
+										<p>{item.answer}</p>
+									</div>
+								</details>
+							))}
+						</div>
+					</section>
+				)
+			}
 		</>
 	) : (
 <Base
@@ -269,7 +384,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 				const search = modal.querySelector("[data-category-search]");
 				if (search) search.value = "";
 
-				modal.querySelectorAll(".category-filter[href], .category-subgroup, .category-group").forEach((item) => {
+				modal.querySelectorAll(".category-filter[href], .category-group").forEach((item) => {
 					item.hidden = false;
 				});
 
@@ -323,14 +438,9 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 					if (matches) visibleCount += 1;
 				});
 
-				modal.querySelectorAll(".category-subgroup").forEach((subgroup) => {
-					const hasVisibleLinks = Boolean(subgroup.querySelector(".category-filter[href]:not([hidden])"));
-					subgroup.hidden = !hasVisibleLinks;
-				});
-
 				modal.querySelectorAll(".category-group").forEach((group) => {
-					const hasVisibleSubgroups = Boolean(group.querySelector(".category-subgroup:not([hidden])"));
-					group.hidden = !hasVisibleSubgroups;
+					const hasVisibleLinks = Boolean(group.querySelector(".category-filter[href]:not([hidden])"));
+					group.hidden = !hasVisibleLinks;
 				});
 
 				const empty = modal.querySelector("[data-category-search-empty]");
@@ -354,7 +464,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 					<div class="category-filter-list">
 						<a data-filter-link class="category-filter category-filter--active" href={cityHref(city)}>
 							<span>Все экскурсии</span>
-							<small>{formatCount(city.experience_count)}</small>
+							<small>{formatCount(cityExperienceCount)}</small>
 						</a>
 						{flatTagsLimit.map((tag: any) => (
 							<a
@@ -380,22 +490,17 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 									<input data-category-search type="search" placeholder="Найти категорию" autocomplete="off" />
 								</div>
 								<div class="category-modal__body">
-									{Array.from(tagsByCategory.entries()).map(([groupName, terms]) => (
+									{Array.from(tagsByCategory.entries()).map(([groupName, groupTags]) => (
 										<div class="category-group">
 											<h3>{groupName}</h3>
-											{Array.from(terms.entries()).map(([termName, groupTags]) => (
-												<div class="category-subgroup">
-													{termName !== "Разное" && <h4>{termName}</h4>}
-													<div class="category-filter-list">
-														{groupTags.map((tag: any) => (
-															<a data-filter-link class="category-filter" href={cityCategoryHref(city, tag)}>
-																<span>{tag.name}</span>
-																<small>{formatCount(tag.experience_count)}</small>
-															</a>
-														))}
-													</div>
-												</div>
-											))}
+											<div class="category-filter-list">
+												{groupTags.map((tag: any) => (
+													<a data-filter-link class="category-filter" href={cityCategoryHref(city, tag)}>
+														<span>{tag.name}</span>
+														<small>{formatCount(tag.experience_count)}</small>
+													</a>
+												))}
+											</div>
 										</div>
 									))}
 									<div class="category-modal__empty" data-category-search-empty hidden>Категории не найдены.</div>
@@ -461,13 +566,163 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		/>
 	</section>
 
-	<section class="section" data-seo-section>
-		<div class="section__heading">
-			<h2>{seoBlock?.h2 ?? "Заголовок"}</h2>
-		</div>
-		<div class="empty-card">{seoBlock?.body ?? "Текст"}</div>
-	</section>
+	{
+		seoBodyHtml && (
+			<section class="section" data-seo-section>
+				{seoBlock?.h2 && (
+					<div class="section__heading">
+						<h2>{seoBlock.h2}</h2>
+					</div>
+				)}
+				<div class="section-copy" set:html={seoBodyHtml} />
+				<div class="schedule-block">
+					<h3>Расписание экскурсий {cityAcrossPhrase}</h3>
+					<div class="schedule-list">
+						{scheduleItems.map((item) => (
+							<div class="schedule-row">
+								<div class="schedule-row__meta">
+									{scheduleDate}, {item.time} · {item.price}
+								</div>
+								<a href="#excursions">{item.title}</a>
+							</div>
+						))}
+					</div>
+				</div>
+			</section>
+		)
+	}
+	{
+		faqItems.length > 0 && (
+			<section class="section faq-section">
+				<div class="section__heading">
+					<h2>Вопросы и ответы</h2>
+				</div>
+				<div class="faq-list">
+					{faqItems.map((item) => (
+						<details class="faq-item">
+							<summary>{item.question}</summary>
+							<div class="faq-item__answer">
+								<p>{item.answer}</p>
+							</div>
+						</details>
+					))}
+				</div>
+			</section>
+		)
+	}
 	<style>
+		.section-copy {
+			color: #1f2420;
+			font-size: 1rem;
+			line-height: 1.65;
+		}
+
+		.section-copy :global(p) {
+			margin: 0 0 12px;
+		}
+
+		.section-copy :global(p:last-child) {
+			margin-bottom: 0;
+		}
+
+		.schedule-block {
+			margin-top: 28px;
+		}
+
+		.schedule-block h3 {
+			margin: 0 0 18px;
+			color: #1f2420;
+			font-size: clamp(1.5rem, 3vw, 2.35rem);
+			line-height: 1.15;
+		}
+
+		.schedule-list {
+			display: grid;
+			gap: 18px;
+		}
+
+		.schedule-row {
+			display: grid;
+			grid-template-columns: minmax(220px, 0.32fr) minmax(0, 1fr);
+			gap: 22px;
+			align-items: baseline;
+		}
+
+		.schedule-row__meta {
+			color: #111817;
+			font-size: 1.08rem;
+			line-height: 1.35;
+			white-space: nowrap;
+		}
+
+		.schedule-row a {
+			color: #111817;
+			font-size: 1.08rem;
+			line-height: 1.35;
+			text-decoration: underline;
+			text-decoration-color: rgba(17, 24, 23, 0.25);
+			text-underline-offset: 4px;
+		}
+
+		.schedule-row a:hover {
+			color: #0486fe;
+			text-decoration-color: rgba(4, 134, 254, 0.4);
+		}
+
+		.faq-list {
+			display: grid;
+			gap: 2px;
+		}
+
+		.faq-item {
+			background: transparent;
+		}
+
+		.faq-item summary {
+			position: relative;
+			display: flex;
+			align-items: center;
+			gap: 14px;
+			min-height: 38px;
+			padding: 4px 0;
+			color: #1f2420;
+			font-size: 1.08rem;
+			font-weight: 650;
+			line-height: 1.3;
+			cursor: pointer;
+			list-style: none;
+		}
+
+		.faq-item summary::-webkit-details-marker {
+			display: none;
+		}
+
+		.faq-item summary::after {
+			content: "";
+			width: 8px;
+			height: 8px;
+			border-right: 2px solid #687067;
+			border-bottom: 2px solid #687067;
+			order: -1;
+			flex: 0 0 8px;
+			transform: translateY(-2px) rotate(45deg);
+			transition: transform 0.18s ease;
+		}
+
+		.faq-item[open] summary::after {
+			transform: translateY(2px) rotate(225deg);
+		}
+
+		.faq-item__answer {
+			padding: 2px 0 12px 22px;
+			color: #3f463f;
+			line-height: 1.55;
+		}
+
+		.faq-item__answer p {
+			margin: 0;
+		}
+
 		.category-panel {
 			display: grid;
 			gap: 12px;
@@ -644,7 +899,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 		.category-group {
 			display: grid;
-			gap: 12px;
+			gap: 7px;
 		}
 
 		.category-group h3 {
@@ -652,19 +907,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			color: #3f463f;
 			font-size: 1rem;
 			line-height: 1.25;
-		}
-
-		.category-subgroup {
-			display: grid;
-			gap: 7px;
-		}
-
-		.category-subgroup h4 {
-			margin: 0;
-			color: #687067;
-			font-size: 0.86rem;
-			line-height: 1.25;
-			text-transform: uppercase;
 		}
 
 		.category-panel > .category-filter-list {
@@ -820,6 +1062,16 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		}
 
 		@media (max-width: 760px) {
+			.schedule-row {
+				grid-template-columns: 1fr;
+				gap: 4px;
+			}
+
+			.schedule-row__meta,
+			.schedule-row a {
+				font-size: 1rem;
+			}
+
 			.category-modal {
 				align-items: flex-end;
 				padding: 8px 0 0;

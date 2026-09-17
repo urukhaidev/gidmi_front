@@ -6,6 +6,7 @@ begin
 	foreach table_name in array array[
 		'tripster_city_tags',
 		'tripster_tags',
+		'experience_tags_new',
 		'tag_category_catalog',
 		'tag_category_links'
 	]

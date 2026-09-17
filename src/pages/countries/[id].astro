@@ -45,7 +45,53 @@ const guides = guidesResult.rows;
 const seoBlock = seoResult.rows[0];
 
 const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
+const escapeHtml = (value: string) =>
+	value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+const formatTextHtml = (value: string) =>
+	value
+		.split(/\n{2,}/)
+		.map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+		.join("");
+const formatSeoBodyHtml = (value: string) =>
+	/<\/?[a-z][\s\S]*>/i.test(value) ? value : formatTextHtml(value);
+const seoBodyHtml = seoBlock?.body ? formatSeoBodyHtml(seoBlock.body) : null;
+type FaqItem = {
+	question: string;
+	answer: string;
+};
+const parseFaqItems = (value: string | null | undefined): FaqItem[] => {
+	if (!value) return [];
+
+	try {
+		const parsed = JSON.parse(value);
+		const items: unknown[] = Array.isArray(parsed)
+			? parsed
+			: Array.isArray(parsed?.items)
+				? parsed.items
+				: [];
+
+		return items
+			.map((item): FaqItem => {
+				const faqItem = item as Partial<FaqItem>;
+				return {
+					question: typeof faqItem.question === "string" ? faqItem.question.trim() : "",
+					answer: typeof faqItem.answer === "string" ? faqItem.answer.trim() : "",
+				};
+			})
+			.filter((item) => item.question && item.answer);
+	} catch {
+		return [];
+	}
+};
+const faqItems = parseFaqItems(seoBlock?.faq);
 const countryPhrase = country.in_obj_phrase || `в ${country.name}`;
+const pageTitleText = seoBlock?.h1 || `Экскурсии ${countryPhrase}`;
+const documentTitle = seoBlock?.title || country.name;
 const countryLead = excursionHeroLead({
 	count: stats?.count ?? country.experience_count,
 	placePhrase: countryPhrase,
@@ -57,12 +103,12 @@ const countryLead = excursionHeroLead({
 Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=120");
 ---
 
-<Base title={country.name} description={`Экскурсии: ${country.name}`}>
+<Base title={documentTitle} description={`Экскурсии: ${country.name}`}>
 	<TravelPageStyles />
 	<section class="page-hero">
 		{country.image_url && <img src={country.image_url} alt="" />}
 		<div class="page-hero__inner">
-			<h1>Экскурсии {countryPhrase}</h1>
+			<h1>{pageTitleText}</h1>
 			<p class="page-lead">{countryLead}</p>
 		</div>
 	</section>
@@ -164,14 +210,108 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		<div class="empty-card">Отзывы будут подключены отдельным блоком после согласования источника данных.</div>
 	</section>
 
-	<section class="section">
-		<div class="section__heading">
-			<h2>{seoBlock?.h2 ?? "Заголовок"}</h2>
-		</div>
-		<div class="empty-card">{seoBlock?.body ?? "Текст"}</div>
-	</section>
+	{
+		seoBodyHtml && (
+			<section class="section" data-seo-section>
+				{seoBlock?.h2 && (
+					<div class="section__heading">
+						<h2>{seoBlock.h2}</h2>
+					</div>
+				)}
+				<div class="section-copy" set:html={seoBodyHtml} />
+			</section>
+		)
+	}
+
+	{
+		faqItems.length > 0 && (
+			<section class="section faq-section">
+				<div class="section__heading">
+					<h2>Вопросы и ответы</h2>
+				</div>
+				<div class="faq-list">
+					{faqItems.map((item) => (
+						<details class="faq-item">
+							<summary>{item.question}</summary>
+							<div class="faq-item__answer">
+								<p>{item.answer}</p>
+							</div>
+						</details>
+					))}
+				</div>
+			</section>
+		)
+	}
 
 	<style>
+		.section-copy {
+			color: #1f2420;
+			font-size: 1rem;
+			line-height: 1.65;
+		}
+
+		.section-copy :global(p) {
+			margin: 0 0 12px;
+		}
+
+		.section-copy :global(p:last-child) {
+			margin-bottom: 0;
+		}
+
+		.faq-list {
+			display: grid;
+			gap: 2px;
+		}
+
+		.faq-item {
+			background: transparent;
+		}
+
+		.faq-item summary {
+			position: relative;
+			display: flex;
+			align-items: center;
+			gap: 14px;
+			min-height: 38px;
+			padding: 4px 0;
+			color: #1f2420;
+			font-size: 1.08rem;
+			font-weight: 650;
+			line-height: 1.3;
+			cursor: pointer;
+			list-style: none;
+		}
+
+		.faq-item summary::-webkit-details-marker {
+			display: none;
+		}
+
+		.faq-item summary::after {
+			content: "";
+			width: 8px;
+			height: 8px;
+			border-right: 2px solid #687067;
+			border-bottom: 2px solid #687067;
+			order: -1;
+			flex: 0 0 8px;
+			transform: translateY(-2px) rotate(45deg);
+			transition: transform 0.18s ease;
+		}
+
+		.faq-item[open] summary::after {
+			transform: translateY(2px) rotate(225deg);
+		}
+
+		.faq-item__answer {
+			padding: 2px 0 12px 22px;
+			color: #3f463f;
+			line-height: 1.55;
+		}
+
+		.faq-item__answer p {
+			margin: 0;
+		}
+
 		.country-city-grid {
 			display: grid;
 			grid-template-columns: repeat(5, minmax(0, 1fr));

@@ -57,7 +57,7 @@ export type { SeoEntityType } from "./seo-query.js";
 export { getReviews } from "./review-query.js";
 
 // Search
-export { getCitySearchExperiences, searchTravel } from "./search-query.js";
+export { getCitySearchCategories, getCitySearchExperiences, searchTravel } from "./search-query.js";
 
 // URL helpers
 export {

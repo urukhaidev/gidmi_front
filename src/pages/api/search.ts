@@ -1,11 +1,10 @@
 import type { APIRoute } from "astro";
 import {
-	cityCategoryHref,
 	cityHref,
+	getCitySearchCategories,
 	getCitySearchExperiences,
 	getCity,
 	experienceHref,
-	getCityTags,
 	searchTravel,
 } from "../../lib/travel-db.js";
 
@@ -16,12 +15,15 @@ export const GET: APIRoute = async ({ url }) => {
 		return Response.json({ results: [] });
 	}
 
-	const { rows, error } = await searchTravel(q, 12);
+	const { rows: rawRows, error } = await searchTravel(q, 12);
 
 	if (error) {
 		return Response.json({ results: [], error }, { status: 502 });
 	}
 
+	const rows = rawRows.map((item) => item.type === "experience"
+		? { ...item, url: experienceHref(item) }
+		: item);
 	const city = rows.find((item) => item.type === "city");
 	const category = city ? null : rows.find((item) => item.type === "category");
 	const experience = city || category ? null : rows.find((item) => item.type === "experience");
@@ -33,11 +35,12 @@ export const GET: APIRoute = async ({ url }) => {
 	const cityDetails = cityId
 		? await Promise.all([
 			getCity(cityId),
-			getCityTags(cityId, 6),
+			getCitySearchCategories(cityId, 6),
 			getCitySearchExperiences(cityId, 6),
 		])
 		: null;
 	const cityRow = cityDetails?.[0].rows[0] ?? null;
+	const cityExperienceCount = cityRow?.experience_count ?? city?.count ?? 0;
 	const cityTitle = cityRow?.name ?? city?.title;
 	const cityUrl = cityRow ? cityHref(cityRow) : city?.url;
 	const cityInPhrase = cityRow?.in_obj_phrase || (cityTitle ? `в ${cityTitle}` : "");
@@ -77,26 +80,18 @@ export const GET: APIRoute = async ({ url }) => {
 					? `Экскурсии по ${cityRoutePhrase}`
 					: "Экскурсии",
 			allCategories: cityUrl && !isCategorySearch
-				? { id: `${cityId}-all-categories`, title: "Все категории", url: `${cityUrl}#categories`, count: cityRow?.experience_count ?? city?.count ?? 0 }
+				? { id: `${cityId}-all-categories`, title: "Все категории", url: `${cityUrl}#categories`, count: cityExperienceCount }
 				: null,
 			allExperiences: cityUrl && !isExperienceSearch
-				? { id: `${cityId}-all-experiences`, title: "Все экскурсии", url: `${cityUrl}#excursions`, count: cityRow?.experience_count ?? city?.count ?? 0 }
+				? { id: `${cityId}-all-experiences`, title: "Все экскурсии", url: `${cityUrl}#excursions`, count: cityExperienceCount }
 				: null,
 			categories: cityDetails[1].rows
-				.filter((tag) => tag.name.toLowerCase() !== "все" && tag.slug !== "all" && tag.slug !== "vse")
+				.filter((tag) => tag.title.toLowerCase() !== "все")
 				.map((tag) => ({
 					id: tag.id,
-					title: tag.name,
-					url: cityCategoryHref(
-						{
-							id: tag.city_id,
-							slug: tag.city_slug,
-							country_slug: tag.country_slug,
-							country_url: tag.country_url,
-						},
-						tag,
-					),
-					count: tag.experience_count,
+					title: tag.title,
+					url: tag.url,
+					count: tag.count,
 				})),
 			experiences: sectionExperiences,
 		}

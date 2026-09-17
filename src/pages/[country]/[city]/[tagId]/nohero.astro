@@ -1,0 +1,25 @@
+---
+import {
+	getCity,
+	getCountry,
+} from "../../../../lib/travel-db.js";
+
+const { country: countryParam, city: cityParam } = Astro.params;
+const tagId = Astro.params.tagId;
+const rewriteParams = new URLSearchParams(Astro.url.searchParams);
+rewriteParams.set("__root", "1");
+rewriteParams.set("__variant", "nohero");
+
+const [countryResult, cityResult] = await Promise.all([
+	getCountry(countryParam),
+	getCity(cityParam),
+]);
+const country = countryResult.rows[0];
+const city = cityResult.rows[0];
+
+if (!country || !city || city.country_id !== country.id) {
+	return Astro.redirect("/404");
+}
+
+return Astro.rewrite(`/cities/${city.id}/categories/${tagId}?${rewriteParams.toString()}`);
+---

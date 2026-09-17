@@ -1,5 +1,5 @@
 import { query } from "./db.js";
-import { slugFromUrl } from "./sql-fragments.js";
+import { citySlug, countrySlug } from "./sql-fragments.js";
 import type { QueryResult, ReviewFilters, ReviewRow } from "./travel-types.js";
 
 const reviewColumns = `
@@ -12,8 +12,8 @@ const reviewColumns = `
 	r.text,
 	r.experience_title,
 	e.title,
-	city.slug as city_slug,
-	${slugFromUrl("country")} as country_slug,
+	${citySlug("city")} as city_slug,
+	${countrySlug("country")} as country_slug,
 	country.url as country_url`;
 
 const reviewJoins = `
@@ -38,10 +38,11 @@ export async function getReviews(
 		where.push(`e.city_id = $${params.length}`);
 	}
 
-	if (filters.cityTagId) {
-		extraJoins.push("inner join experience_tags et on et.experience_id = r.experience_id");
-		params.push(Number(filters.cityTagId));
-		where.push(`et.citytag_id = $${params.length}`);
+	if (filters.categoryId) {
+		params.push(Number(filters.categoryId));
+		where.push(
+			`exists (select 1 from experience_tags_new etn where etn.experience_id = r.experience_id and etn.catalog_id = $${params.length})`,
+		);
 	}
 
 	const limit = filters.limit ?? 6;

@@ -1,5 +1,5 @@
 import { query } from "./db.js";
-import { displayName, slugFromUrl } from "./sql-fragments.js";
+import { citySlug, countrySlug, displayName } from "./sql-fragments.js";
 import type { QueryResult, SearchResultRow } from "./travel-types.js";
 
 export async function searchTravel(
@@ -15,8 +15,8 @@ export async function searchTravel(
 	const pattern = `%${normalized}%`;
 	const countrySearchText = "(coalesce(c.name_ru, '') || ' ' || coalesce(c.name_en, ''))";
 	const citySearchText = "(coalesce(c.name_ru, '') || ' ' || coalesce(c.name_en, ''))";
-	const tagSearchText = "(coalesce(ct.name, tt.name, '') || ' ' || coalesce(ct.slug, tt.slug, '') || ' ' || coalesce(ct.url, ''))";
-	const experienceSearchText = "(coalesce(e.title, '') || ' ' || coalesce(e.tagline, '') || ' ' || coalesce(e.annotation, ''))";
+	const tagSearchText = "(coalesce(cat.main_name, '') || ' ' || coalesce(cat.sub_name, '') || ' ' || coalesce(cat.title, '') || ' ' || coalesce(cat.header, '') || ' ' || coalesce(cat.main_slug, '') || ' ' || coalesce(cat.sub_slug, '') || ' ' || coalesce(array_to_string(cat.lexical_triggers, ' '), ''))";
+	const experienceSearchText = "e.title";
 
 	return query<SearchResultRow>(
 		`
@@ -25,7 +25,7 @@ export async function searchTravel(
 				'country' as type,
 				c.id::text as id,
 				${displayName("c", "Страна")} as title,
-				'/' || coalesce(nullif(${slugFromUrl("c")}, ''), c.id::text) as url,
+				'/' || coalesce(nullif(${countrySlug("c")}, ''), c.id::text) as url,
 				c.cover_image_url as image_url,
 				c.experience_count::int as count,
 				null::text as city_id,
@@ -33,7 +33,7 @@ export async function searchTravel(
 				null::text as city_name,
 				c.id::text as country_id,
 				c.url as country_url,
-				${slugFromUrl("c")} as country_slug,
+				${countrySlug("c")} as country_slug,
 				1 as sort_group
 			from countries c
 			where ${countrySearchText} ilike $1
@@ -44,16 +44,16 @@ export async function searchTravel(
 				'city' as type,
 				c.id::text as id,
 				${displayName("c", "Город")} as title,
-				'/' || coalesce(nullif(${slugFromUrl("country")}, ''), country.id::text) || '/' ||
-					coalesce(nullif(c.slug, ''), nullif(${slugFromUrl("c")}, ''), c.id::text) as url,
+				'/' || coalesce(nullif(${countrySlug("country")}, ''), country.id::text) || '/' ||
+					coalesce(nullif(${citySlug("c")}, ''), c.id::text) as url,
 				c.image_cover as image_url,
 				c.experience_count::int as count,
 				c.id::text as city_id,
-				c.slug as city_slug,
+				${citySlug("c")} as city_slug,
 				${displayName("c", "Город")} as city_name,
 				c.country_id::text as country_id,
 				country.url as country_url,
-				${slugFromUrl("country")} as country_slug,
+				${countrySlug("country")} as country_slug,
 				2 as sort_group
 			from cities c
 			left join countries country on country.id = c.country_id
@@ -63,27 +63,41 @@ export async function searchTravel(
 
 			select
 				'category' as type,
-				ct.citytag_id::text as id,
-				coalesce(ct.name, tt.name) as title,
-				'/' || coalesce(nullif(${slugFromUrl("country")}, ''), country.id::text) || '/' ||
-					coalesce(nullif(city.slug, ''), nullif(${slugFromUrl("city")}, ''), city.id::text) || '/' ||
-					coalesce(nullif(ct.slug, ''), nullif(tt.slug, ''), nullif(${slugFromUrl("ct")}, ''), ct.citytag_id::text) as url,
-				ct.image_medium as image_url,
-				coalesce(ct.experience_count, 0)::int as count,
-				ct.city_id::text as city_id,
-				city.slug as city_slug,
+				cat.id::text as id,
+				cat.sub_name as title,
+				'/' || coalesce(nullif(${countrySlug("country")}, ''), country.id::text) || '/' ||
+					coalesce(nullif(${citySlug("city")}, ''), city.id::text) || '/' ||
+					coalesce(nullif(cat.sub_slug, ''), cat.id::text) as url,
+				null::text as image_url,
+				count(*)::int as count,
+				city.id::text as city_id,
+				${citySlug("city")} as city_slug,
 				${displayName("city", "Город")} as city_name,
 				city.country_id::text as country_id,
 				country.url as country_url,
-				${slugFromUrl("country")} as country_slug,
+				${countrySlug("country")} as country_slug,
 				3 as sort_group
-			from tripster_city_tags ct
-			left join tripster_tags tt on tt.id = ct.tag_id
-			left join cities city on city.id = ct.city_id
+			from tag_category_catalog cat
+			inner join experience_tags_new etn on etn.catalog_id = cat.id
+			inner join experiences tagged_experience on tagged_experience.id = etn.experience_id
+			inner join cities city on city.id = tagged_experience.city_id
 			left join countries country on country.id = city.country_id
-			where ${tagSearchText} ilike $1
-				and coalesce(ct.is_hidden, false) = false
-				and coalesce(ct.experience_count, 0) > 0
+			where lower(${tagSearchText}) like lower($1)
+			group by
+				cat.id,
+				cat.sub_name,
+				cat.sub_slug,
+				city.id,
+				city.name_ru,
+				city.name_en,
+				city.page_slug,
+				city.slug,
+				city.url,
+				city.country_id,
+				country.id,
+				country.url,
+				country.page_slug
+			having count(*) > 0
 
 			union all
 
@@ -92,18 +106,18 @@ export async function searchTravel(
 				e.id::text as id,
 				e.title,
 				case
-					when city.slug is not null and ${slugFromUrl("country")} is not null then
-						'/' || ${slugFromUrl("country")} || '/' || city.slug || '/excursions/' || e.id::text
+					when ${citySlug("city")} is not null and ${countrySlug("country")} is not null then
+				'/' || ${countrySlug("country")} || '/' || ${citySlug("city")} || '/excursions/' || e.id::text
 					else '/excursions/' || e.id::text
 				end as url,
-				e.cover_image_url as image_url,
+				null::text as image_url,
 				coalesce(e.review_count, 0)::int as count,
 				e.city_id::text as city_id,
-				city.slug as city_slug,
+				${citySlug("city")} as city_slug,
 				${displayName("city", "Город")} as city_name,
 				e.country_id::text as country_id,
 				country.url as country_url,
-				${slugFromUrl("country")} as country_slug,
+				${countrySlug("country")} as country_slug,
 				4 as sort_group
 			from experiences e
 			left join cities city on city.id = e.city_id
@@ -120,10 +134,65 @@ export async function searchTravel(
 export interface SearchExperienceSuggestionRow {
 	id: string;
 	title: string;
-	image_url: null;
+	image_url: string | null;
 	review_count: number | null;
 	city_slug: string | null;
 	country_slug: string | null;
+}
+
+export interface SearchCategorySuggestionRow {
+	id: string;
+	title: string;
+	url: string;
+	count: number;
+	city_id: string;
+	city_slug: string | null;
+	city_name: string | null;
+	country_url: string | null;
+	country_slug: string | null;
+}
+
+export async function getCitySearchCategories(
+	cityId: string,
+	limit = 6,
+): Promise<QueryResult<SearchCategorySuggestionRow>> {
+	return query<SearchCategorySuggestionRow>(
+		`
+		with category_counts as (
+			select
+				etn.catalog_id,
+				count(*)::int as experience_count
+			from experience_tags_new etn
+			inner join experiences e on e.id = etn.experience_id
+			where e.city_id = $1::int
+			group by etn.catalog_id
+		)
+		select
+			cat.id::text as id,
+			cat.sub_name as title,
+			'/' || coalesce(nullif(${countrySlug("country")}, ''), country.id::text) || '/' ||
+				coalesce(nullif(${citySlug("city")}, ''), city.id::text) || '/' ||
+				coalesce(nullif(cat.sub_slug, ''), cat.id::text) as url,
+			coalesce(category_counts.experience_count, 0)::int as count,
+			city.id::text as city_id,
+			${citySlug("city")} as city_slug,
+			${displayName("city", "Город")} as city_name,
+			country.url as country_url,
+			${countrySlug("country")} as country_slug
+		from category_counts
+		inner join tag_category_catalog cat on cat.id = category_counts.catalog_id
+		inner join cities city on city.id = $1::int
+		left join countries country on country.id = city.country_id
+		where coalesce(cat.is_hidden, false) = false
+		order by
+			cat.main_sort_order asc nulls last,
+			cat.sub_sort_order asc nulls last,
+			category_counts.experience_count desc nulls last,
+			cat.sub_name asc
+		limit $2
+		`,
+		[Number(cityId), limit],
+	);
 }
 
 export async function getCitySearchExperiences(
@@ -137,8 +206,8 @@ export async function getCitySearchExperiences(
 			e.title,
 			null::text as image_url,
 			e.review_count,
-			city.slug as city_slug,
-			${slugFromUrl("country")} as country_slug
+			${citySlug("city")} as city_slug,
+			${countrySlug("country")} as country_slug
 		from experiences e
 		left join cities city on city.id = e.city_id
 		left join countries country on country.id = e.country_id

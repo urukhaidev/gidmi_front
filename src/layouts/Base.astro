@@ -6,12 +6,12 @@ import {
 	EmDashBodyEnd,
 } from "emdash/ui";
 import { createPublicPageContext } from "emdash/page";
+import gidmiLogo from "../assets/gidmi.png";
 import SearchBox from "../components/SearchBox.astro";
 import {
-	cityCategoryHref,
 	cityHref,
 	countryHref,
-	getCityTags,
+	getCitySearchCategories,
 	getTopCities,
 	getTopCountries,
 } from "../lib/travel-db.js";
@@ -102,15 +102,15 @@ const siteSettingsPromise = getSiteSettings();
 const headerSuggestionsPromise = providedHeaderSuggestions
 	? Promise.resolve(providedHeaderSuggestions)
 	: searchCity
-		? getCityTags(searchCity.id, 12).then((result) => result.rows
-		.filter((tag) => tag.name.toLowerCase() !== "все" && tag.slug !== "all" && tag.slug !== "vse")
+		? getCitySearchCategories(searchCity.id, 12).then((result) => result.rows
+		.filter((tag) => tag.title.toLowerCase() !== "все")
 		.slice(0, 10)
 		.map((tag) => ({
-			title: tag.name,
+			title: tag.title,
 			subtitle: "Рубрика",
-			count: tag.experience_count,
-			countLabel: excursionLabel(tag.experience_count),
-			href: cityCategoryHref(searchCity, tag),
+			count: tag.count,
+			countLabel: excursionLabel(tag.count),
+			href: tag.url,
 		})))
 		: Promise.all([getTopCountries(6), getTopCities(5)]).then(([countries, cities]) => [
 		...countries.rows.map((country) => ({
@@ -166,7 +166,7 @@ const pageCtx = createPublicPageContext({
 		<header class:list={["site-header", isHomePage && "site-header--home"]}>
 			<nav class="site-header__nav" aria-label="Основная навигация">
 				<a class="brand-link" href="/" aria-label={siteTitle}>
-					<img class="brand-link__mark" src="/gidmi_logo_site_light_96h.png" alt="" />
+					<img class="brand-link__mark" src={gidmiLogo.src} alt="" />
 				</a>
 				<div class="site-header__links">
 					{
@@ -391,6 +391,11 @@ const pageCtx = createPublicPageContext({
 </html>
 
 <style>
+	:global(:root) {
+		--site-gutter: 24px;
+		--site-content-max: 1200px;
+	}
+
 	.site-header {
 		position: sticky;
 		top: 0;
@@ -406,9 +411,9 @@ const pageCtx = createPublicPageContext({
 		grid-template-columns: auto minmax(0, 1fr) minmax(220px, 260px);
 		align-items: center;
 		gap: 18px;
-		max-width: 1200px;
+		max-width: var(--site-content-max);
 		margin: 0 auto;
-		padding: 12px 24px;
+		padding: 12px var(--site-gutter);
 	}
 
 	.site-header__links {
@@ -629,9 +634,9 @@ const pageCtx = createPublicPageContext({
 		grid-template-columns: minmax(0, 1fr) minmax(240px, 50%) minmax(0, 1fr);
 		align-items: start;
 		gap: 32px;
-		max-width: 1200px;
+		max-width: var(--site-content-max);
 		margin: 0 auto;
-		padding: 42px 24px;
+		padding: 42px var(--site-gutter);
 	}
 
 	.site-footer a {
@@ -726,11 +731,23 @@ const pageCtx = createPublicPageContext({
 		background: transparent;
 	}
 
+	@media (min-width: 761px) and (max-width: 1440px) {
+		:global(:root) {
+			--site-gutter: 48px;
+			--site-content-max: 1104px;
+		}
+	}
+
 	@media (max-width: 760px) {
+		:global(:root) {
+			--site-gutter: 18px;
+			--site-content-max: 1200px;
+		}
+
 		.site-header__nav {
 			grid-template-columns: minmax(0, 1fr) auto;
 			gap: 10px 12px;
-			padding: 12px 18px;
+			padding: 12px var(--site-gutter);
 		}
 
 		.site-header__links {
@@ -940,7 +957,7 @@ const pageCtx = createPublicPageContext({
 
 		.site-footer__inner {
 			grid-template-columns: 1fr;
-			padding: 34px 18px;
+			padding: 34px var(--site-gutter);
 		}
 
 		.site-footer__brand,

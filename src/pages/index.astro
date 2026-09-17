@@ -248,6 +248,11 @@ const formatPrice = (experience: any) => {
 	</section>
 
 	<style>
+		:global(:root) {
+			--site-gutter: 24px;
+			--site-content-max: 1200px;
+		}
+
 		:global(body) {
 			margin: 0;
 			color: #1f2420;
@@ -326,7 +331,7 @@ const formatPrice = (experience: any) => {
 		.hero__inner {
 			position: relative;
 			z-index: 1;
-			width: min(1200px, calc(100% - 48px));
+			width: min(var(--site-content-max), calc(100% - (var(--site-gutter) * 2)));
 			margin: 0 auto;
 			padding: 96px 0;
 			color: #fff;
@@ -356,7 +361,7 @@ const formatPrice = (experience: any) => {
 		}
 
 		.notice {
-			max-width: 1200px;
+			max-width: var(--site-content-max);
 			margin: 34px auto 0;
 			padding: 24px;
 			border: 1px solid rgba(31, 36, 32, 0.12);
@@ -377,15 +382,21 @@ const formatPrice = (experience: any) => {
 		}
 
 		.section {
-			max-width: 1200px;
+			max-width: var(--site-content-max);
 			margin: 0 auto;
-			padding: 56px 24px;
+			padding: 56px var(--site-gutter);
 		}
 
 		.section--muted {
 			max-width: none;
-			padding-left: max(24px, calc((100vw - 1200px) / 2 + 24px));
-			padding-right: max(24px, calc((100vw - 1200px) / 2 + 24px));
+			padding-left: max(
+				var(--site-gutter),
+				calc((100vw - var(--site-content-max) - (var(--site-gutter) * 2)) / 2 + var(--site-gutter))
+			);
+			padding-right: max(
+				var(--site-gutter),
+				calc((100vw - var(--site-content-max) - (var(--site-gutter) * 2)) / 2 + var(--site-gutter))
+			);
 			background: #E5F0FF;
 		}
 
@@ -456,7 +467,7 @@ const formatPrice = (experience: any) => {
 
 		.destination-card__name {
 			font-size: 1.12rem;
-			font-weight: 850;
+			font-weight: 400;
 		}
 
 		.destination-card small {
@@ -675,7 +686,19 @@ const formatPrice = (experience: any) => {
 			font-size: 1.05rem;
 		}
 
+		@media (min-width: 761px) and (max-width: 1440px) {
+			:global(:root) {
+				--site-gutter: 48px;
+				--site-content-max: 1104px;
+			}
+		}
+
 		@media (max-width: 760px) {
+			:global(:root) {
+				--site-gutter: 18px;
+				--site-content-max: 1200px;
+			}
+
 			:global(header nav) {
 				align-items: flex-start;
 				flex-wrap: wrap;
@@ -687,17 +710,16 @@ const formatPrice = (experience: any) => {
 			}
 
 			.hero__inner {
-				width: min(100% - 36px, 1200px);
 				padding: 58px 0 42px;
 			}
 
 			.section {
-				padding: 42px 18px;
+				padding: 42px var(--site-gutter);
 			}
 
 			.section--muted {
-				padding-left: 18px;
-				padding-right: 18px;
+				padding-left: var(--site-gutter);
+				padding-right: var(--site-gutter);
 			}
 
 			.destination-grid,

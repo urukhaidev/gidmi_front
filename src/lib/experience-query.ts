@@ -60,7 +60,7 @@ export async function getExperiences(
 }
 
 export async function getExperienceStats(
-	filters: Pick<ExperienceFilters, "countryId" | "cityId" | "cityTagId"> = {},
+	filters: Pick<ExperienceFilters, "countryId" | "cityId" | "categoryId"> = {},
 ): Promise<QueryResult<ExperienceStatsRow>> {
 	const { where, params, extraJoins } = buildExperienceFilterClauses(filters);
 	const whereClause = where.length ? `where ${where.join(" and ")}` : "";
@@ -71,7 +71,8 @@ export async function getExperienceStats(
 			select
 				e.id,
 				e.price_value,
-				e.price_currency
+				e.price_currency,
+				coalesce(e.review_count, 0) as review_count
 			from experiences e
 			${extraJoins.join("\n")}
 			${whereClause}
@@ -88,7 +89,8 @@ export async function getExperienceStats(
 		select
 			count(filtered.id)::int as count,
 			min_price.price_value as min_price_value,
-			min_price.price_currency as min_price_currency
+			min_price.price_currency as min_price_currency,
+			coalesce(sum(filtered.review_count), 0)::int as review_count
 		from filtered
 		left join min_price on true
 		group by min_price.price_value, min_price.price_currency
@@ -138,12 +140,11 @@ function buildExperienceFilterClauses(filters: ExperienceFilters) {
 		where.push("e.price_value is not null and e.price_value > 5000");
 	}
 
-	if (filters.cityTagId) {
-		extraJoins.push(
-			"inner join experience_tags et on et.experience_id = e.id",
+	if (filters.categoryId) {
+		params.push(Number(filters.categoryId));
+		where.push(
+			`exists (select 1 from experience_tags_new etn where etn.experience_id = e.id and etn.catalog_id = $${params.length})`,
 		);
-		params.push(Number(filters.cityTagId));
-		where.push(`et.citytag_id = $${params.length}`);
 	}
 
 	return { where, params, extraJoins };
@@ -173,10 +174,10 @@ export async function getExperiencePhotos(
 		select
 			p.id::text as id,
 			p.position,
-			coalesce(p.medium_url, p.thumbnail_xl_url, p.thumbnail_l_url,
-			         p.thumbnail_m_url, p.thumbnail_url) as image_url
+			p.thumbnail_url as image_url
 		from experience_photos p
 		where p.experience_id = $1
+			and p.thumbnail_url is not null
 		order by p.position asc
 		limit $2
 		`,
@@ -191,31 +192,17 @@ export async function getExperienceTags(
 	const { tagColumns } = await import("./sql-fragments.js");
 	return query<TagRow>(
 		`
-		with selected_city_tags as (
-			select ct.*
-			from (
-				select distinct citytag_id
-				from experience_tags
-				where experience_id = $1
-			) et
-			inner join tripster_city_tags ct on ct.citytag_id = et.citytag_id
-			left join tripster_tags tt on tt.id = ct.tag_id
-			order by ct.experience_count desc nulls last, coalesce(ct.name, tt.name) asc
-			limit $2
-		)
-		select
-			${tagColumns()}
-		from selected_city_tags ct
-		left join tripster_tags tt on tt.id = ct.tag_id
-		left join tag_category_links tcl on tcl.tag_id = ct.tag_id
-		left join tag_category_catalog cat on cat.id = tcl.catalog_id
-		left join cities city on city.id = ct.city_id
+		select ${tagColumns("cat")}
+		from experience_tags_new etn
+		inner join tag_category_catalog cat on cat.id = etn.catalog_id
+		inner join experiences e on e.id = etn.experience_id
+		left join cities city on city.id = e.city_id
 		left join countries country on country.id = city.country_id
+		where etn.experience_id = $1
 		order by
 			cat.main_sort_order asc nulls last,
 			cat.sub_sort_order asc nulls last,
-			ct.experience_count desc nulls last,
-			coalesce(ct.name, tt.name) asc
+			cat.sub_name asc
 		limit $2
 		`,
 		[Number(experienceId), limit],

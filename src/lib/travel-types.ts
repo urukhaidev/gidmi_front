@@ -46,6 +46,7 @@ export interface CityRow {
 	country_slug?: string | null;
 	about_obj_phrase: string | null;
 	in_obj_phrase: string | null;
+	across_obj_phrase: string | null;
 	guides_count: number;
 	experience_count: number;
 }
@@ -125,6 +126,7 @@ export interface ExperienceStatsRow {
 	count: number;
 	min_price_value: number | null;
 	min_price_currency: string | null;
+	review_count: number;
 }
 
 export interface TagRow {
@@ -136,6 +138,10 @@ export interface TagRow {
 	tag_category: string | null;
 	group_name: string | null;
 	term_name: string | null;
+	title: string | null;
+	header: string | null;
+	seo_description: string | null;
+	seo_text: string | null;
 	group_slug: string | null;
 	term_slug: string | null;
 	url: string | null;
@@ -180,8 +186,11 @@ export interface SearchResultRow {
 export interface SeoBlockRow {
 	entity_type: "country" | "city" | "city_category";
 	entity_id: string;
+	h1: string | null;
+	title: string | null;
 	h2: string;
 	body: string;
+	faq: string | null;
 }
 
 export interface ReviewRow {
@@ -208,7 +217,7 @@ export interface ExperienceFilters {
 	offset?: number;
 	countryId?: string | null;
 	cityId?: string | null;
-	cityTagId?: string | number | null;
+	categoryId?: string | number | null;
 	sort?: string;
 	persons?: string | number;
 	format?: string;
@@ -225,7 +234,7 @@ export interface GuideFilters {
 export interface ReviewFilters {
 	experienceId?: string | null;
 	cityId?: string | null;
-	cityTagId?: string | number | null;
+	categoryId?: string | number | null;
 	limit?: number;
 }
 

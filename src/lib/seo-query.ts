@@ -16,8 +16,11 @@ export async function getSeoBlock(
 		select
 			entity_type,
 			entity_id,
+			h1,
+			title,
 			h2,
-			body
+			body,
+			faq
 		from seo_blocks
 		where entity_type = $1
 			and entity_id = $2

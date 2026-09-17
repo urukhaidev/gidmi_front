@@ -1,4 +1,9 @@
 <style is:global>
+	:root {
+		--site-gutter: 24px;
+		--site-content-max: 1200px;
+	}
+
 	body {
 		margin: 0;
 		color: #1f2420;
@@ -73,7 +78,7 @@
 	.page-hero__inner {
 		position: relative;
 		z-index: 1;
-		width: min(1200px, calc(100% - 48px));
+		width: min(var(--site-content-max), calc(100% - (var(--site-gutter) * 2)));
 		margin: 0 auto;
 		padding: 72px 0 48px;
 	}
@@ -104,7 +109,6 @@
 	}
 
 	h1 {
-		max-width: 860px;
 		margin: 0;
 		font-size: clamp(2.4rem, 4.5vw, 3.75rem);
 		line-height: 0.98;
@@ -120,9 +124,9 @@
 	}
 
 	.section {
-		max-width: 1200px;
+		max-width: var(--site-content-max);
 		margin: 0 auto;
-		padding: 24px 24px;
+		padding: 24px var(--site-gutter);
 	}
 
 	.section__heading {
@@ -439,7 +443,19 @@
 		font-weight: 800;
 	}
 
+	@media (min-width: 761px) and (max-width: 1440px) {
+		:root {
+			--site-gutter: 48px;
+			--site-content-max: 1104px;
+		}
+	}
+
 	@media (max-width: 760px) {
+		:root {
+			--site-gutter: 18px;
+			--site-content-max: 1200px;
+		}
+
 		header nav {
 			align-items: flex-start;
 			flex-wrap: wrap;
@@ -447,12 +463,11 @@
 		}
 
 		.page-hero__inner {
-			width: min(100% - 36px, 1200px);
 			padding: 52px 0 38px;
 		}
 
 		.section {
-			padding: 24px 18px;
+			padding-block: 24px;
 		}
 
 		.excursion-filter-bar {

@@ -10,6 +10,7 @@ import {
 	getCity,
 	getCityTag,
 	getCityTags,
+	getExperienceStats,
 	getExperiences,
 	getReviews,
 	getSeoBlock,
@@ -34,8 +35,10 @@ if (!tag) {
 
 const preferredPath = cityCategoryHref(city, tag);
 const isRootRewrite = Astro.url.searchParams.get("__root") === "1";
-if (!isRootRewrite && Astro.url.pathname !== preferredPath) {
-	return Astro.redirect(`${preferredPath}${Astro.url.search}`);
+const isNoHero = Astro.url.searchParams.get("__variant") === "nohero";
+const pagePath = isNoHero ? `${preferredPath}/nohero` : preferredPath;
+if (!isRootRewrite && Astro.url.pathname !== pagePath) {
+	return Astro.redirect(`${pagePath}${Astro.url.search}`);
 }
 
 const sortParam = Astro.url.searchParams.get("sort") ?? "popular";
@@ -58,20 +61,22 @@ const pageSize = 24;
 const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
 const currentPage = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1;
 
-const [tagsResult, experiencesResult, reviewsResult, seoResult] = await Promise.all([
+const [tagsResult, experiencesResult, cityStatsResult, categoryStatsResult, reviewsResult, seoResult] = await Promise.all([
 	isResultsRequest
 		? Promise.resolve({ rows: [], error: null })
-		: getCityTags(city.id, 80),
+		: getCityTags(city.id),
 	getExperiences({
 		limit: pageSize + 1,
 		offset: (currentPage - 1) * pageSize,
 		cityId: city.id,
-		cityTagId: tag.id,
+		categoryId: tag.id,
 		...filterState,
 	}),
+	getExperienceStats({ cityId: city.id }),
+	getExperienceStats({ cityId: city.id, categoryId: tag.id }),
 	isResultsRequest
 		? Promise.resolve({ rows: [], error: null })
-		: getReviews({ limit: 9, cityId: city.id, cityTagId: tag.id }),
+		: getReviews({ limit: 9, cityId: city.id, categoryId: tag.id }),
 	getSeoBlock("city_category", tag.id),
 ]);
 
@@ -93,18 +98,20 @@ const flatTagsLimit = (() => {
 
 const tagsByCategory = rawTags.reduce((groups, tag) => {
 	const groupName = tag.group_name || tag.category || tag.tag_category || "Категории";
-	const termName = tag.term_name || "Разное";
-	const terms = groups.get(groupName) ?? new Map<string, typeof rawTags>();
-	const termTags = terms.get(termName) ?? [];
-	if (!termTags.some((item) => item.id === tag.id)) {
-		termTags.push(tag);
+	const groupTags = groups.get(groupName) ?? [];
+	if (!groupTags.some((item) => item.id === tag.id)) {
+		groupTags.push(tag);
+		groupTags.sort(
+			(a, b) => b.experience_count - a.experience_count || a.name.localeCompare(b.name, "ru"),
+		);
 	}
-	terms.set(termName, termTags);
-	groups.set(groupName, terms);
+	groups.set(groupName, groupTags);
 	return groups;
-}, new Map<string, Map<string, typeof rawTags>>());
+}, new Map<string, typeof rawTags>());
 const hasNextPage = experiencesResult.rows.length > pageSize;
 const experiences = experiencesResult.rows.slice(0, pageSize);
+const cityStats = cityStatsResult.rows[0];
+const cityExperienceCount = cityStats?.count ?? city.experience_count;
 const hasActiveFilters =
 	currentSort !== "popular" ||
 	currentPersons !== "1" ||
@@ -117,14 +124,92 @@ const pageCount = hasActiveFilters
 	: totalPagesFromTag;
 const reviews = reviewsResult.rows;
 const seoBlock = seoResult.rows[0];
+const categoryStats = categoryStatsResult.rows[0];
 const country = city.country_id
 	? { id: city.country_id, slug: city.country_slug, url: city.country_url }
 	: null;
 const cityPhrase = city.in_obj_phrase || `в ${city.name}`;
 const categoryName = tag.name.charAt(0).toLowerCase() + tag.name.slice(1);
-const title = `Экскурсии ${categoryName} ${cityPhrase}`;
-const description = `${title}: экскурсии, маршруты и гиды на Гидми.`;
 const formatCount = (value: number | string | null | undefined) => Number(value ?? 0).toLocaleString("ru-RU");
+const categoryExperienceCount = categoryStats?.count ?? tag.experience_count;
+const monthNames = [
+	{ nominative: "январь", prepositional: "январе" },
+	{ nominative: "февраль", prepositional: "феврале" },
+	{ nominative: "март", prepositional: "марте" },
+	{ nominative: "апрель", prepositional: "апреле" },
+	{ nominative: "май", prepositional: "мае" },
+	{ nominative: "июнь", prepositional: "июне" },
+	{ nominative: "июль", prepositional: "июле" },
+	{ nominative: "август", prepositional: "августе" },
+	{ nominative: "сентябрь", prepositional: "сентябре" },
+	{ nominative: "октябрь", prepositional: "октябре" },
+	{ nominative: "ноябрь", prepositional: "ноябре" },
+	{ nominative: "декабрь", prepositional: "декабре" },
+];
+const currentMonth = new Date();
+const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+const months = `${monthNames[currentMonth.getMonth()].nominative}-${monthNames[nextMonth.getMonth()].nominative}`;
+const monthsAfterPreposition = `${monthNames[currentMonth.getMonth()].prepositional}-${monthNames[nextMonth.getMonth()].prepositional}`;
+const formatPrice = (
+	value: number | string | null | undefined,
+	currency: string | null | undefined,
+) => {
+	const numericValue = Number(value);
+	if (!Number.isFinite(numericValue) || numericValue <= 0) return "";
+
+	if (currency) {
+		try {
+			return new Intl.NumberFormat("ru-RU", {
+				style: "currency",
+				currency,
+				maximumFractionDigits: 0,
+			}).format(numericValue);
+		} catch {
+			return `${formatCount(numericValue)} ${currency}`;
+		}
+	}
+
+	return formatCount(numericValue);
+};
+const reviewCount = categoryStats?.review_count ?? 0;
+const placeholderValues = {
+	city: city.in_obj_phrase || `в ${city.name}`,
+	months,
+	min_price: formatPrice(categoryStats?.min_price_value, categoryStats?.min_price_currency),
+	count: formatCount(categoryExperienceCount),
+	reviews: formatCount(reviewCount),
+};
+const applyPlaceholders = (template: string | null | undefined) => {
+	if (!template) return null;
+
+	return template
+		.replace(
+			/(^|[\s([{])([Вв])\s+\{\{\s*months\s*\}\}/g,
+			(_, prefix: string, preposition: string) => `${prefix}${preposition} ${monthsAfterPreposition}`,
+		)
+		.replace(/\{\{\s*(city|months|min_price|count|reviews)\s*\}\}/g, (_, key: keyof typeof placeholderValues) => {
+			return placeholderValues[key] ?? "";
+		});
+};
+const escapeHtml = (value: string) =>
+	value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+const formatTextHtml = (value: string) =>
+	value
+		.split(/\n{2,}/)
+		.map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+		.join("");
+const fallbackTitle = `Экскурсии ${categoryName} ${cityPhrase}`;
+const title = applyPlaceholders(tag.title) ?? fallbackTitle;
+const header = applyPlaceholders(tag.header) ?? fallbackTitle;
+const description = applyPlaceholders(tag.seo_description) ?? `${title}: экскурсии, маршруты и гиды на Гидми.`;
+const seoText = applyPlaceholders(tag.seo_text);
+const seoBodyHtml = seoText ? formatTextHtml(seoText) : seoBlock?.body ? formatTextHtml(seoBlock.body) : null;
+const seoHeading = seoText ? "О разделе" : seoBlock?.h2;
 const paginationItems = (() => {
 	if (hasActiveFilters) {
 		const start = Math.max(1, currentPage - 2);
@@ -148,6 +233,7 @@ const paginationItems = (() => {
 const pageHref = (page: number) => {
 	const params = new URLSearchParams(Astro.url.searchParams);
 	params.delete("__root");
+	params.delete("__variant");
 
 	if (page <= 1) {
 		params.delete("page");
@@ -156,7 +242,7 @@ const pageHref = (page: number) => {
 	}
 
 	const query = params.toString();
-	return query ? `${preferredPath}?${query}` : preferredPath;
+	return query ? `${pagePath}?${query}` : pagePath;
 };
 
 Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=120");
@@ -185,14 +271,14 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 					<span>/</span>
 					<span>{tag.name}</span>
 				</nav>
-				<h1>{title}</h1>
+				<h1>{header}</h1>
 				<p class="page-lead">
-					{formatCount(tag.experience_count)} экскурсий в категории «{tag.name}».
+					{formatCount(categoryExperienceCount)} экскурсий в категории «{tag.name}».
 				</p>
 			</div>
 			<CategoryExcursionResults
-				title={title}
-				preferredPath={preferredPath}
+				title={fallbackTitle}
+				preferredPath={pagePath}
 				filterState={filterState}
 				experiences={experiences}
 				pageCount={pageCount}
@@ -200,42 +286,71 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 				paginationItems={paginationItems}
 				pageHref={pageHref}
 			/>
-			<section class="section" data-seo-section>
-				<div class="section__heading">
-					<h2>{seoBlock?.h2 ?? "Заголовок"}</h2>
-				</div>
-				<div class="empty-card">{seoBlock?.body ?? "Текст"}</div>
-			</section>
+			{
+				seoBodyHtml && (
+					<section class="section" data-seo-section>
+						{seoHeading && (
+							<div class="section__heading">
+								<h2>{seoHeading}</h2>
+							</div>
+						)}
+						<div class="empty-card seo-text" set:html={seoBodyHtml} />
+					</section>
+				)
+			}
 		</>
 	) : (
 <Base title={title} description={description} searchCity={city}>
 	<TravelPageStyles />
-	<section class="page-hero">
-		<div data-page-hero-media>
-			{(tag.image_url || city.image_url) && <img src={tag.image_url || city.image_url} alt="" />}
-		</div>
-		<div class="page-hero__inner" data-page-hero-inner>
-			<nav class="breadcrumbs" aria-label="Хлебные крошки">
-				<a href="/">Гидми</a>
-				{
-					country && city.country_name && (
-						<>
-							<span>/</span>
-							<a href={countryHref(country)}>{city.country_name}</a>
-						</>
-					)
-				}
-				<span>/</span>
-				<a href={cityHref(city)}>{city.name}</a>
-				<span>/</span>
-				<span>{tag.name}</span>
-			</nav>
-			<h1>{title}</h1>
-			<p class="page-lead">
-				{formatCount(tag.experience_count)} экскурсий в категории «{tag.name}».
-			</p>
-		</div>
-	</section>
+	{
+		isNoHero ? (
+			<section class="section nohero-title">
+				<nav class="breadcrumbs breadcrumbs--plain" aria-label="Хлебные крошки">
+					<a href="/">Гидми</a>
+					{
+						country && city.country_name && (
+							<>
+								<span>/</span>
+								<a href={countryHref(country)}>{city.country_name}</a>
+							</>
+						)
+					}
+					<span>/</span>
+					<a href={cityHref(city)}>{city.name}</a>
+					<span>/</span>
+					<span>{tag.name}</span>
+				</nav>
+				<h1>{header}</h1>
+			</section>
+		) : (
+			<section class="page-hero">
+				<div data-page-hero-media>
+					{(tag.image_url || city.image_url) && <img src={tag.image_url || city.image_url} alt="" />}
+				</div>
+				<div class="page-hero__inner" data-page-hero-inner>
+					<nav class="breadcrumbs" aria-label="Хлебные крошки">
+						<a href="/">Гидми</a>
+						{
+							country && city.country_name && (
+								<>
+									<span>/</span>
+									<a href={countryHref(country)}>{city.country_name}</a>
+								</>
+							)
+						}
+						<span>/</span>
+						<a href={cityHref(city)}>{city.name}</a>
+						<span>/</span>
+						<span>{tag.name}</span>
+					</nav>
+					<h1>{header}</h1>
+					<p class="page-lead">
+						{formatCount(categoryExperienceCount)} экскурсий в категории «{tag.name}».
+					</p>
+				</div>
+			</section>
+		)
+	}
 
 	<script is:inline>
 		(() => {
@@ -261,7 +376,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 				const search = modal.querySelector("[data-category-search]");
 				if (search) search.value = "";
 
-				modal.querySelectorAll(".category-filter[href], .category-subgroup, .category-group").forEach((item) => {
+				modal.querySelectorAll(".category-filter[href], .category-group").forEach((item) => {
 					item.hidden = false;
 				});
 
@@ -315,14 +430,9 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 					if (matches) visibleCount += 1;
 				});
 
-				modal.querySelectorAll(".category-subgroup").forEach((subgroup) => {
-					const hasVisibleLinks = Boolean(subgroup.querySelector(".category-filter[href]:not([hidden])"));
-					subgroup.hidden = !hasVisibleLinks;
-				});
-
 				modal.querySelectorAll(".category-group").forEach((group) => {
-					const hasVisibleSubgroups = Boolean(group.querySelector(".category-subgroup:not([hidden])"));
-					group.hidden = !hasVisibleSubgroups;
+					const hasVisibleLinks = Boolean(group.querySelector(".category-filter[href]:not([hidden])"));
+					group.hidden = !hasVisibleLinks;
 				});
 
 				const empty = modal.querySelector("[data-category-search-empty]");
@@ -344,7 +454,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			<div class="category-filter-list">
 				<a data-filter-link class="category-filter" href={cityHref(city)}>
 					<span>Все экскурсии</span>
-					<small>{formatCount(city.experience_count)}</small>
+					<small>{formatCount(cityExperienceCount)}</small>
 				</a>
 				{
 					flatTagsLimit.map((item) => (
@@ -375,30 +485,25 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 							<input data-category-search type="search" placeholder="Найти категорию" autocomplete="off" />
 						</div>
 						<div class="category-modal__body">
-							{Array.from(tagsByCategory.entries()).map(([groupName, terms]) => (
+							{Array.from(tagsByCategory.entries()).map(([groupName, groupTags]) => (
 										<div class="category-group">
 											<h3>{groupName}</h3>
-											{Array.from(terms.entries()).map(([termName, groupTags]) => (
-												<div class="category-subgroup">
-													{termName !== "Разное" && <h4>{termName}</h4>}
-													<div class="category-filter-list">
-														{groupTags.map((t: any) => (
-															<a
-																data-filter-link
-																class:list={[
-																	"category-filter",
-																	t.id === tag.id && "category-filter--active",
-																]}
-																href={cityCategoryHref(city, t)}
-															>
-																<span>{t.name}</span>
-																<small>{formatCount(t.experience_count)}</small>
-															</a>
-														))}
-													</div>
-												</div>
-											))}
-								</div>
+											<div class="category-filter-list">
+												{groupTags.map((t: any) => (
+													<a
+														data-filter-link
+														class:list={[
+															"category-filter",
+															t.id === tag.id && "category-filter--active",
+														]}
+														href={cityCategoryHref(city, t)}
+													>
+														<span>{t.name}</span>
+														<small>{formatCount(t.experience_count)}</small>
+													</a>
+												))}
+											</div>
+										</div>
 							))}
 							<div class="category-modal__empty" data-category-search-empty hidden>Категории не найдены.</div>
 						</div>
@@ -409,8 +514,8 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 	</section>
 
 	<CategoryExcursionResults
-		title={title}
-		preferredPath={preferredPath}
+		title={fallbackTitle}
+		preferredPath={pagePath}
 		filterState={filterState}
 		experiences={experiences}
 		pageCount={pageCount}
@@ -430,13 +535,45 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		/>
 	</section>
 
-	<section class="section" data-seo-section>
-		<div class="section__heading">
-			<h2>{seoBlock?.h2 ?? "Заголовок"}</h2>
-		</div>
-		<div class="empty-card">{seoBlock?.body ?? "Текст"}</div>
-	</section>
+	{
+		seoBodyHtml && (
+			<section class="section" data-seo-section>
+				{seoHeading && (
+					<div class="section__heading">
+						<h2>{seoHeading}</h2>
+					</div>
+				)}
+				<div class="empty-card seo-text" set:html={seoBodyHtml} />
+			</section>
+		)
+	}
 	<style>
+		.seo-text :global(p) {
+			margin: 0 0 12px;
+		}
+
+		.seo-text :global(p:last-child) {
+			margin-bottom: 0;
+		}
+
+		.nohero-title {
+			padding-top: 48px;
+			padding-bottom: 22px;
+		}
+
+		.nohero-title h1 {
+			color: #1f2420;
+		}
+
+		.breadcrumbs--plain {
+			margin-bottom: 18px;
+			color: #687067;
+		}
+
+		.breadcrumbs--plain a:hover {
+			color: #1f2420;
+		}
+
 		.category-panel {
 			display: grid;
 			gap: 12px;
@@ -614,7 +751,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 		.category-group {
 			display: grid;
-			gap: 12px;
+			gap: 7px;
 		}
 
 		.category-group h3 {
@@ -622,19 +759,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			color: #3f463f;
 			font-size: 1rem;
 			line-height: 1.25;
-		}
-
-		.category-subgroup {
-			display: grid;
-			gap: 7px;
-		}
-
-		.category-subgroup h4 {
-			margin: 0;
-			color: #687067;
-			font-size: 0.86rem;
-			line-height: 1.25;
-			text-transform: uppercase;
 		}
 
 		.category-modal__body .category-filter-list {
