@@ -1,0 +1,238 @@
+---
+interface Props {
+	photos: { image_url: string | null }[];
+	title: string;
+	variant?: "default" | "top";
+}
+
+const { photos, title, variant = "default" } = Astro.props;
+---
+
+<experience-gallery class:list={["photo-grid", { "photo-grid--top": variant === "top" }]}>
+	<div class="photo-strip" role="region" tabindex="0" aria-label="Фотографии экскурсии — листайте перетаскиванием или стрелками клавиатуры">
+		{photos.map((photo, index) => (
+			<a class="photo" href={photo.image_url ?? undefined} aria-label={`Открыть фото ${index + 1} из ${photos.length}: ${title}`}>
+				<img src={photo.image_url ?? undefined} alt={`${title} — фото ${index + 1}`} loading={index < 3 ? "eager" : "lazy"} fetchpriority={variant === "top" && index === 0 ? "high" : "auto"} decoding="async" data-travel-image />
+				<span class="photo-counter" aria-hidden="true">{index + 1} из {photos.length}</span>
+			</a>
+		))}
+	</div>
+	<dialog aria-label="Полная фотография экскурсии">
+		<button class="close" type="button" aria-label="Закрыть фотографию" autofocus>×</button>
+		<span class="full-counter" role="status" aria-live="polite" aria-atomic="true"></span>
+		{photos.length > 1 && <button class="photo-arrow photo-arrow--previous" type="button" aria-label="Предыдущая фотография"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button>}
+		<img class="full-photo" alt="" />
+		{photos.length > 1 && <button class="photo-arrow photo-arrow--next" type="button" aria-label="Следующая фотография"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button>}
+	</dialog>
+</experience-gallery>
+
+<script>
+	class ExperienceGallery extends HTMLElement {
+		connectedCallback() {
+			if (this.dataset.ready) return;
+			this.dataset.ready = "true";
+			const dialog = this.querySelector("dialog")!;
+			const fullPhoto = this.querySelector<HTMLImageElement>(".full-photo")!;
+			const strip = this.querySelector<HTMLElement>(".photo-strip")!;
+			let pointerId: number | null = null;
+			let startX = 0;
+			let startScroll = 0;
+			let dragged = false;
+			strip.addEventListener("dragstart", (event) => event.preventDefault());
+			strip.addEventListener("pointerdown", (event) => {
+				dragged = false;
+				if (event.pointerType !== "mouse" || event.button !== 0) return;
+				pointerId = event.pointerId;
+				startX = event.clientX;
+				startScroll = strip.scrollLeft;
+			});
+			strip.addEventListener("pointermove", (event) => {
+				if (event.pointerId !== pointerId) return;
+				const distance = event.clientX - startX;
+				if (!dragged && Math.abs(distance) < 6) return;
+				if (!dragged) {
+					dragged = true;
+					strip.classList.add("is-dragging");
+					strip.setPointerCapture(event.pointerId);
+				}
+				strip.scrollLeft = startScroll - distance;
+			});
+			const endDrag = () => {
+				pointerId = null;
+				strip.classList.remove("is-dragging");
+			};
+			strip.addEventListener("pointerup", endDrag);
+			strip.addEventListener("pointercancel", endDrag);
+			strip.addEventListener("lostpointercapture", endDrag);
+			strip.addEventListener("pointerleave", () => {
+				if (!dragged) endDrag();
+			});
+			strip.addEventListener("click", (event) => {
+				if (!dragged || event.detail === 0) return;
+				event.preventDefault();
+				event.stopPropagation();
+			}, true);
+			strip.addEventListener("keydown", (event) => {
+				if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+				event.preventDefault();
+				const photoWidth = strip.querySelector(".photo")!.getBoundingClientRect().width;
+				strip.scrollBy({ left: (photoWidth + 10) * (event.key === "ArrowRight" ? 1 : -1), behavior: "smooth" });
+			});
+			let previousOverflow = "";
+			let activePhoto: HTMLAnchorElement | null = null;
+			const photos = Array.from(this.querySelectorAll<HTMLAnchorElement>(".photo"));
+			const counter = this.querySelector<HTMLElement>(".full-counter")!;
+			let currentIndex = 0;
+			const showPhoto = (index: number) => {
+				currentIndex = (index + photos.length) % photos.length;
+				const photo = photos[currentIndex];
+				fullPhoto.src = photo.href;
+				fullPhoto.alt = photo.querySelector("img")?.alt ?? "Фотография экскурсии";
+				counter.textContent = `${currentIndex + 1} из ${photos.length}`;
+			};
+			this.querySelector(".photo-arrow--previous")?.addEventListener("click", () => showPhoto(currentIndex - 1));
+			this.querySelector(".photo-arrow--next")?.addEventListener("click", () => showPhoto(currentIndex + 1));
+			dialog.addEventListener("keydown", (event) => {
+				if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+				event.preventDefault();
+				showPhoto(currentIndex + (event.key === "ArrowRight" ? 1 : -1));
+			});
+			photos.forEach((photo, index) => {
+				photo.addEventListener("click", (event) => {
+					if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+					event.preventDefault();
+					activePhoto = photo;
+					showPhoto(index);
+					previousOverflow = document.documentElement.style.overflow;
+					dialog.showModal();
+					document.documentElement.style.overflow = "hidden";
+				});
+			});
+			this.querySelector(".close")!.addEventListener("click", () => dialog.close());
+			dialog.addEventListener("click", (event) => {
+				if (event.target === dialog) dialog.close();
+			});
+			dialog.addEventListener("close", () => {
+				document.documentElement.style.overflow = previousOverflow;
+				fullPhoto.removeAttribute("src");
+				activePhoto?.focus({ preventScroll: true });
+			});
+		}
+	}
+	if (!customElements.get("experience-gallery")) {
+		customElements.define("experience-gallery", ExperienceGallery);
+	}
+</script>
+
+<style>
+	experience-gallery { display: block; min-width: 0; max-width: 100%; }
+	.photo-strip {
+		display: flex;
+		gap: 10px;
+		overflow-x: auto;
+		overflow-y: hidden;
+		scrollbar-width: none;
+		scroll-snap-type: x proximity;
+		overscroll-behavior-x: contain;
+		-webkit-overflow-scrolling: touch;
+		cursor: grab;
+		user-select: none;
+	}
+	.photo-strip::-webkit-scrollbar { display: none; }
+	.photo-strip.is-dragging { scroll-snap-type: none; }
+	.photo-strip.is-dragging, .photo-strip.is-dragging .photo { cursor: grabbing; }
+	.photo-strip:focus-visible { outline: 2px solid #0486fe; outline-offset: 3px; }
+	.photo {
+		position: relative;
+		display: block;
+		flex: 0 0 calc((100% - 20px) / 3);
+		min-width: 0;
+		aspect-ratio: 16 / 9;
+		border-radius: 8px;
+		overflow: hidden;
+		scroll-snap-align: start;
+		cursor: grab;
+	}
+	.photo:focus-visible { outline: 3px solid #0486fe; outline-offset: -3px; }
+	.photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+	.photo-counter {
+		position: absolute;
+		right: 10px;
+		bottom: 10px;
+		padding: 5px 9px;
+		border-radius: 6px;
+		color: #fff;
+		background: rgb(0 0 0 / 60%);
+		font-size: 12px;
+		font-weight: 500;
+		line-height: 1.2;
+		pointer-events: none;
+	}
+	.photo-grid--top .photo { flex-basis: min(520px, 82vw); aspect-ratio: 1; }
+	dialog {
+		position: fixed;
+		inset: 0;
+		box-sizing: border-box;
+		width: 100%;
+		height: 100%;
+		max-width: none;
+		max-height: none;
+		margin: 0;
+		padding: 64px 64px 24px;
+		border: 0;
+		background: transparent;
+	}
+	dialog::backdrop { background: rgb(0 0 0 / 92%); }
+	dialog[open] { display: flex; align-items: center; justify-content: center; }
+	.full-photo { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; }
+	.full-counter {
+		position: absolute;
+		top: 20px;
+		left: 50%;
+		transform: translateX(-50%);
+		color: #fff;
+		font-size: 15px;
+		line-height: 20px;
+	}
+	.photo-arrow {
+		position: absolute;
+		top: 50%;
+		transform: translateY(-50%);
+		display: grid;
+		place-items: center;
+		width: 44px;
+		height: 44px;
+		padding: 10px;
+		border: 0;
+		border-radius: 50%;
+		color: #fff;
+		background: rgb(37 37 37 / 85%);
+		cursor: pointer;
+	}
+	.photo-arrow--previous { left: 12px; }
+	.photo-arrow--next { right: 12px; }
+	.photo-arrow svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+	.photo-arrow:hover, .close:hover { background: #444; }
+	.photo-arrow:focus-visible, .close:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+	.close {
+		position: absolute;
+		top: 8px;
+		right: 12px;
+		width: 44px;
+		height: 44px;
+		border: 0;
+		border-radius: 50%;
+		color: #fff;
+		background: #252525;
+		font: 32px/1 sans-serif;
+		cursor: pointer;
+	}
+	@media (max-width: 860px) {
+		.photo { flex-basis: calc((100% - 20px) / 2.5); aspect-ratio: 4 / 3; }
+		.photo-grid--top .photo { flex-basis: min(82vw, 360px); }
+	}
+	@media (max-width: 520px) {
+		.photo-grid--top .photo { flex-basis: 46vw; }
+		dialog { padding-inline: 8px; }
+	}
+</style>

@@ -1,7 +1,9 @@
 ---
 import { getExperiencePageData } from "../../../../../lib/experience-page-data";
+import { uniqueGalleryPhotos } from "../../../../../lib/gallery-photos";
 import Base from "../../../../../layouts/Base.astro";
 import ExperienceCard from "../../../../../components/ExperienceCard.astro";
+import ExperienceGallery from "../../../../../components/ExperienceGallery.astro";
 import ReviewList from "../../../../../components/ReviewList.astro";
 import TravelPageStyles from "../../../../../components/TravelPageStyles.astro";
 import {
@@ -43,9 +45,7 @@ const photos = photosResult.rows.filter((item) => item.image_url);
 const reviews = reviewsResult.rows;
 const heroImage = experience.image_url ?? photos[0]?.image_url;
 const galleryPhotos = photos.length > 0 ? photos : heroImage ? [{ id: experience.id, position: 0, image_url: heroImage }] : [];
-const displayedGalleryPhotos = galleryPhotos.length > 0
-	? Array.from({ length: 5 }, (_, index) => galleryPhotos[index % galleryPhotos.length])
-	: [];
+const displayedGalleryPhotos = uniqueGalleryPhotos(galleryPhotos);
 const countryUrl = experience.country_name
 	? countryHref({ id: experience.country_id, slug: experience.country_slug, url: experience.country_url })
 	: null;
@@ -101,11 +101,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 	<section class="section gallery-first">
 		{
 			displayedGalleryPhotos.length > 0 ? (
-				<div class="photo-grid photo-grid--top">
-					{displayedGalleryPhotos.map((photo, index) => (
-						<img src={photo.image_url} alt="" loading={index < 3 ? "eager" : "lazy"} fetchpriority={index === 0 ? "high" : "auto"} decoding="async" data-travel-image />
-					))}
-				</div>
+				<ExperienceGallery photos={displayedGalleryPhotos} title={experience.title} variant="top" />
 			) : (
 				<div class="gallery-placeholder"></div>
 			)
@@ -217,7 +213,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 
 		.gallery-first {
 			padding-top: 24px;
-			padding-bottom: 24px;
+			padding-bottom: 0;
 		}
 
 		.gallery-breadcrumbs {
@@ -232,32 +228,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		.gallery-breadcrumbs a {
 			color: inherit;
 			text-decoration: none;
-		}
-
-		.photo-grid {
-			display: flex;
-			overflow-x: auto;
-			overflow-y: hidden;
-			gap: 10px;
-			width: 100%;
-			max-width: 100%;
-			padding-bottom: 6px;
-			scroll-snap-type: x proximity;
-			overscroll-behavior-x: contain;
-			-webkit-overflow-scrolling: touch;
-		}
-
-		.photo-grid img {
-			flex: 0 0 min(520px, 82vw);
-			width: min(520px, 82vw);
-			aspect-ratio: 1 / 1;
-			object-fit: cover;
-			border-radius: 8px;
-			scroll-snap-align: start;
-		}
-
-		.photo-grid img:first-child {
-			max-height: none;
 		}
 
 		.gallery-placeholder {
@@ -512,25 +482,17 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		@media (max-width: 860px) {
 			.gallery-first {
 				padding-top: 20px;
-				padding-bottom: 12px;
+				padding-bottom: 0;
 			}
 
 			.variant-layout {
 				grid-template-columns: 1fr;
-				padding-top: 22px;
+				padding-top: 24px;
 				gap: 22px;
 			}
 
 			.detail-sidebar {
 				position: static;
-			}
-
-			.photo-grid img,
-			.photo-grid img:first-child {
-				flex-basis: min(82vw, 360px);
-				width: min(82vw, 360px);
-				height: auto;
-				aspect-ratio: 1 / 1;
 			}
 
 			.excursion-bottom-cta {
@@ -540,12 +502,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 		}
 
 		@media (max-width: 520px) {
-			.photo-grid img,
-			.photo-grid img:first-child {
-				flex-basis: 46vw;
-				width: 46vw;
-			}
-
 			.excursion-bottom-cta__price span {
 				font-size: 1rem;
 			}

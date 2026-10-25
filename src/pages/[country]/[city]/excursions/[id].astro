@@ -1,7 +1,9 @@
 ---
 import { getExperiencePageData } from "../../../../lib/experience-page-data";
+import { uniqueGalleryPhotos } from "../../../../lib/gallery-photos";
 import Base from "../../../../layouts/Base.astro";
 import ExperienceCard from "../../../../components/ExperienceCard.astro";
+import ExperienceGallery from "../../../../components/ExperienceGallery.astro";
 import ReviewList from "../../../../components/ReviewList.astro";
 import TravelPageStyles from "../../../../components/TravelPageStyles.astro";
 import {
@@ -41,11 +43,7 @@ const related = relatedResult.rows.filter((item) => item.id !== experience.id).s
 const photos = photosResult.rows.filter((item) => item.image_url);
 const reviews = reviewsResult.rows;
 const heroImage = experience.image_url ?? photos[0]?.image_url;
-const additionalPhotos = photos.filter((photo) => photo.image_url !== heroImage);
-const galleryPhotos = additionalPhotos.length > 0 ? additionalPhotos : photos;
-const displayedGalleryPhotos = galleryPhotos.length > 0
-	? Array.from({ length: 5 }, (_, index) => galleryPhotos[index % galleryPhotos.length])
-	: [];
+const displayedGalleryPhotos = uniqueGalleryPhotos(photos, heroImage);
 const countryUrl = experience.country_name
 	? countryHref({ id: experience.country_id, slug: experience.country_slug, url: experience.country_url })
 	: null;
@@ -121,11 +119,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 	<section class="section experience-layout">
 		{
 			displayedGalleryPhotos.length > 0 ? (
-				<div class="photo-grid">
-					{displayedGalleryPhotos.map((photo, index) => (
-						<img src={photo.image_url} alt="" loading={index < 3 ? "eager" : "lazy"} decoding="async" data-travel-image />
-					))}
-				</div>
+				<ExperienceGallery photos={displayedGalleryPhotos} title={experience.title} />
 			) : (
 				<div></div>
 			)
@@ -221,6 +215,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			display: grid;
 			grid-template-columns: minmax(0, 1fr) 320px;
 			gap: 28px;
+			row-gap: 24px;
 			align-items: start;
 			padding-top: 24px;
 		}
@@ -306,24 +301,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			stroke-width: 1.6;
 			stroke-linecap: round;
 			stroke-linejoin: round;
-		}
-
-		.photo-grid {
-			display: grid;
-			grid-template-columns: repeat(6, minmax(0, 1fr));
-			gap: 10px;
-		}
-
-		.photo-grid img {
-			width: 100%;
-			aspect-ratio: 16 / 9;
-			object-fit: cover;
-			border-radius: 8px;
-		}
-
-		.photo-grid img:first-child {
-			grid-column: span 2;
-			max-height: 190px;
 		}
 
 		.info-grid {
@@ -489,6 +466,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 				grid-template-columns: 1fr;
 				padding-top: 22px;
 				gap: 22px;
+				row-gap: 24px;
 			}
 
 			.detail-sidebar {
@@ -500,29 +478,6 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 			.experience-layout article {
 				grid-column: auto;
 				grid-row: auto;
-			}
-
-			.photo-grid {
-				display: flex;
-				overflow-x: auto;
-				overflow-y: hidden;
-				gap: 10px;
-				width: 100%;
-				max-width: 100%;
-				padding-bottom: 6px;
-				scroll-snap-type: x proximity;
-				overscroll-behavior-x: contain;
-				-webkit-overflow-scrolling: touch;
-			}
-
-			.photo-grid img,
-			.photo-grid img:first-child {
-				flex: 0 0 calc((100% - 20px) / 2.5);
-				width: calc((100% - 20px) / 2.5);
-				height: auto;
-				max-height: none;
-				aspect-ratio: 4 / 3;
-				scroll-snap-align: start;
 			}
 		}
 
