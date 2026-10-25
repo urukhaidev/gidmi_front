@@ -117,8 +117,8 @@ export async function searchTravel(
 				e.title,
 				case
 					when ${citySlug("city")} is not null and ${countrySlug("country")} is not null then
-				'/' || ${countrySlug("country")} || '/' || ${citySlug("city")} || '/excursions/' || coalesce(nullif(trim(e.slug), ''), e.id::text)
-					else '/excursions/' || coalesce(nullif(trim(e.slug), ''), e.id::text)
+				'/' || ${countrySlug("country")} || '/' || ${citySlug("city")} || '/excursions/' || e.slug
+					else '/excursions/' || e.slug
 				end as url,
 				null::text as image_url,
 				coalesce(e.review_count, 0)::int as count,

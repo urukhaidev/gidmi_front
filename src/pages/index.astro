@@ -16,7 +16,7 @@ const { countries, cities, experiences, errors } =
 
 Astro.response.headers.set(
 	"Cache-Control",
-	"public, s-maxage=180, stale-while-revalidate=60",
+	import.meta.env.DEV ? "no-store" : "public, s-maxage=180, stale-while-revalidate=60",
 );
 
 const heroImage =
@@ -260,35 +260,6 @@ const formatPrice = (experience: any) => {
 			font-family:
 				Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
 				sans-serif;
-		}
-
-		:global(header) {
-			position: sticky;
-			top: 0;
-			z-index: 20;
-			border-bottom: 1px solid rgba(31, 36, 32, 0.1);
-			background: rgba(255, 255, 255, 0.94);
-			backdrop-filter: blur(14px);
-		}
-
-		:global(header nav) {
-			display: flex;
-			align-items: center;
-			gap: 18px;
-			max-width: 1200px;
-			margin: 0 auto;
-			padding: 16px 24px;
-		}
-
-		:global(header nav > a:first-child) {
-			margin-right: auto;
-			color: #1f2420;
-			text-decoration: none;
-		}
-
-		:global(header nav a) {
-			color: #3f463f;
-			text-decoration: none;
 		}
 
 		:global(main) {
@@ -704,12 +675,6 @@ const formatPrice = (experience: any) => {
 			:global(:root) {
 				--site-gutter: 18px;
 				--site-content-max: 1200px;
-			}
-
-			:global(header nav) {
-				align-items: flex-start;
-				flex-wrap: wrap;
-				padding: 14px 18px;
 			}
 
 			.hero {

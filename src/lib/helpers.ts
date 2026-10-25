@@ -78,7 +78,7 @@ export function cityCategoryHref(city: Linkable, tag: TagLinkable): string {
 export function experienceHref(experience: (Linkable & { city_slug?: string | null }) | null | undefined): string {
 	if (!experience) return "";
 
-	const slug = experience.slug?.trim() || experience.id;
+	const slug = experience.slug?.trim();
 
 	const citySlug = experience.city_slug;
 	const countrySlug = experience.country_slug;

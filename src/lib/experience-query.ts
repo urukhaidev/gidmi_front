@@ -151,22 +151,18 @@ function buildExperienceFilterClauses(filters: ExperienceFilters) {
 }
 
 export async function getExperience(
-	slugOrId: string | undefined,
+	slug: string | undefined,
 ): Promise<QueryResult<ExperienceRow>> {
-	if (!slugOrId) return { rows: [], error: null };
-
-	// Older URLs used the ID alone or an ID followed by a generated title slug.
-	const legacyId = slugOrId.match(/^(\d+)(?:-|$)/)?.[1] ?? null;
+	if (!slug) return { rows: [], error: null };
 	return query<ExperienceRow>(
 		`
 		select ${experienceColumns}
 		from experiences e
 		${experienceJoins}
-		where e.slug = $1 or e.id = $2::bigint
-		order by (e.slug = $1) desc nulls last
+		where e.slug = $1
 		limit 1
 		`,
-		[slugOrId, legacyId],
+		[slug],
 	);
 }
 

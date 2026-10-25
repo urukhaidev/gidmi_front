@@ -71,7 +71,7 @@ export async function query<T = Record<string, unknown>>(
 		return { rows: [], error: "SUPABASE_DATABASE_URL is not configured" };
 	}
 
-	const cacheable = /^\s*(select|with)\b/i.test(sql);
+	const cacheable = !import.meta.env.DEV && /^\s*(select|with)\b/i.test(sql);
 	const cacheKey = cacheable ? `${sql}\u0000${JSON.stringify(params)}` : null;
 	const now = Date.now();
 
