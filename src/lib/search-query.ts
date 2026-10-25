@@ -23,6 +23,7 @@ export async function searchTravel(
 			select
 				'country' as type,
 				c.id::text as id,
+				null::text as slug,
 				${displayName("c", "Страна")} as title,
 				'/' || coalesce(nullif(${countrySlug("c")}, ''), c.id::text) as url,
 				c.cover_image_url as image_url,
@@ -42,6 +43,7 @@ export async function searchTravel(
 			select
 				'city' as type,
 				c.id::text as id,
+				null::text as slug,
 				${displayName("c", "Город")} as title,
 				'/' || coalesce(nullif(${countrySlug("country")}, ''), country.id::text) || '/' ||
 					coalesce(nullif(${citySlug("c")}, ''), c.id::text) as url,
@@ -63,6 +65,7 @@ export async function searchTravel(
 			select
 				'category' as type,
 				cat.id::text as id,
+				null::text as slug,
 				cat.sub_name as title,
 				'/' || coalesce(nullif(${countrySlug("country")}, ''), country.id::text) || '/' ||
 					coalesce(nullif(${citySlug("city")}, ''), city.id::text) || '/' ||
@@ -110,11 +113,12 @@ export async function searchTravel(
 			select
 				'experience' as type,
 				e.id::text as id,
+				e.slug,
 				e.title,
 				case
 					when ${citySlug("city")} is not null and ${countrySlug("country")} is not null then
-				'/' || ${countrySlug("country")} || '/' || ${citySlug("city")} || '/excursions/' || e.id::text
-					else '/excursions/' || e.id::text
+				'/' || ${countrySlug("country")} || '/' || ${citySlug("city")} || '/excursions/' || coalesce(nullif(trim(e.slug), ''), e.id::text)
+					else '/excursions/' || coalesce(nullif(trim(e.slug), ''), e.id::text)
 				end as url,
 				null::text as image_url,
 				coalesce(e.review_count, 0)::int as count,
@@ -139,6 +143,7 @@ export async function searchTravel(
 
 export interface SearchExperienceSuggestionRow {
 	id: string;
+	slug: string | null;
 	title: string;
 	image_url: string | null;
 	review_count: number | null;
@@ -209,6 +214,7 @@ export async function getCitySearchExperiences(
 		`
 		select
 			e.id::text as id,
+			e.slug,
 			e.title,
 			null::text as image_url,
 			e.review_count,

@@ -74,6 +74,7 @@ export interface CityTopRow {
 
 export interface ExperienceRow {
 	id: string;
+	slug: string | null;
 	title: string;
 	tagline: string | null;
 	annotation: string | null;
@@ -171,6 +172,7 @@ export interface GuideRow {
 export interface SearchResultRow {
 	type: "country" | "city" | "category" | "experience";
 	id: string;
+	slug: string | null;
 	title: string;
 	url: string;
 	image_url: string | null;
@@ -196,6 +198,7 @@ export interface SeoBlockRow {
 export interface ReviewRow {
 	id: string;
 	experience_id: string;
+	experience_slug: string | null;
 	author_name: string | null;
 	avatar_url: string | null;
 	created_on: string | null;

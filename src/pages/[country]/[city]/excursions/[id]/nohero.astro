@@ -14,13 +14,7 @@ import {
 } from "../../../../../lib/travel-db.js";
 
 const { id: paramId } = Astro.params;
-const id = paramId ? paramId.split("-")[0] : "";
-
-const [experienceResult, photosResult, reviewsResult] = await Promise.all([
-	getExperience(id),
-	getExperiencePhotos(id),
-	getReviews({ experienceId: id, limit: 8 }),
-]);
+const experienceResult = await getExperience(paramId);
 const experience = experienceResult.rows[0];
 
 if (!experience) {
@@ -32,6 +26,11 @@ const variantPath = `${canonicalPath}/nohero`;
 if (Astro.url.pathname !== variantPath) {
 	return Astro.redirect(`${variantPath}${Astro.url.search}`, 301);
 }
+
+const [photosResult, reviewsResult] = await Promise.all([
+	getExperiencePhotos(experience.id),
+	getReviews({ experienceId: experience.id, limit: 8 }),
+]);
 
 const searchCity = experience.city_id
 	? {

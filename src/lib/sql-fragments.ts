@@ -91,6 +91,7 @@ export const tagColumns = (
 
 export const experienceColumns = `
 	e.id::text as id,
+	e.slug,
 	e.title,
 	e.tagline,
 	e.annotation,
@@ -134,6 +135,7 @@ export const experienceColumns = `
 
 export const experienceCardColumns = `
 	e.id::text as id,
+	e.slug,
 	e.title,
 	e.tagline,
 	e.url,

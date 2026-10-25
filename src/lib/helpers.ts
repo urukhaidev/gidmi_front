@@ -75,39 +75,17 @@ export function cityCategoryHref(city: Linkable, tag: TagLinkable): string {
 	return `${cityHref(city)}/${pathPart(resolveTagSlug(tag))}`;
 }
 
-function slugify(text: string | null | undefined): string {
-	if (!text) return "";
-
-	const ru: Record<string, string> = {
-		'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
-		'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
-		'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
-		'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu',
-		'я': 'ya'
-	};
-
-	return String(text)
-		.toLowerCase()
-		.trim()
-		.replace(/[а-яё]/g, (char) => ru[char] ?? char)
-		.replace(/[^a-z0-9\s-]/g, "")
-		.replace(/[\s-]+/g, "-")
-		.replace(/^-+|-+$/g, "");
-}
-
-export function experienceHref(experience: any): string {
+export function experienceHref(experience: (Linkable & { city_slug?: string | null }) | null | undefined): string {
 	if (!experience) return "";
 
-	const id = experience.id;
-	const title = experience.title;
-	const slug = title ? slugify(title) : "";
+	const slug = experience.slug?.trim() || experience.id;
 
 	const citySlug = experience.city_slug;
 	const countrySlug = experience.country_slug;
 
 	if (citySlug && countrySlug) {
-		return `/${pathPart(countrySlug)}/${pathPart(citySlug)}/excursions/${pathPart(id)}${slug ? "-" + slug : ""}`;
+		return `/${pathPart(countrySlug)}/${pathPart(citySlug)}/excursions/${pathPart(slug)}`;
 	}
 
-	return `/excursions/${pathPart(id)}${slug ? "-" + slug : ""}`;
+	return `/excursions/${pathPart(slug)}`;
 }

@@ -2,8 +2,7 @@
 import { experienceHref, getExperience } from "../../../../../lib/travel-db.js";
 
 const { id: paramId } = Astro.params;
-const id = paramId ? paramId.split("-")[0] : "";
-const experienceResult = await getExperience(id);
+const experienceResult = await getExperience(paramId);
 const experience = experienceResult.rows[0];
 
 if (!experience) {

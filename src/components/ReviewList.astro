@@ -57,7 +57,7 @@ const reviewTitle = (review: ReviewRow) =>
 							class="review-card__link"
 							href={experienceHref({
 								id: review.experience_id,
-								title: reviewTitle(review),
+								slug: review.experience_slug,
 								city_slug: review.city_slug,
 								country_slug: review.country_slug,
 								country_url: review.country_url,

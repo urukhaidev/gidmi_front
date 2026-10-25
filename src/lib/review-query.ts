@@ -5,6 +5,7 @@ import type { QueryResult, ReviewFilters, ReviewRow } from "./travel-types.js";
 const reviewColumns = `
 	r.id::text as id,
 	r.experience_id::text as experience_id,
+	e.slug as experience_slug,
 	r.author_name,
 	coalesce(r.avatar_medium_url, r.avatar_small_url) as avatar_url,
 	coalesce(r.created_on::text, r.created_at::date::text, r.created_on_dt::date::text) as created_on,
