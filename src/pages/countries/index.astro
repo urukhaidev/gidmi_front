@@ -32,13 +32,14 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-r
 
 		<div class="countries-grid">
 			{
-				popularCountries.map((country) => (
+				popularCountries.map((country, index) => (
 					<PlaceCard
 						href={countryHref(country)}
 						name={country.name}
 						count={country.experience_count}
 						secondaryCount={country.guides_count}
 						image={country.image_url}
+						loading={index < 8 ? "eager" : "lazy"}
 					/>
 				))
 			}

@@ -1,4 +1,5 @@
 ---
+import { getExperiencePageData } from "../../../../../lib/experience-page-data";
 import Base from "../../../../../layouts/Base.astro";
 import ExperienceCard from "../../../../../components/ExperienceCard.astro";
 import ReviewList from "../../../../../components/ReviewList.astro";
@@ -7,9 +8,6 @@ import {
 	cityHref,
 	countryHref,
 	getExperience,
-	getExperiencePhotos,
-	getExperiences,
-	getReviews,
 	experienceHref,
 } from "../../../../../lib/travel-db.js";
 
@@ -27,10 +25,7 @@ if (Astro.url.pathname !== variantPath) {
 	return Astro.redirect(`${variantPath}${Astro.url.search}`, 301);
 }
 
-const [photosResult, reviewsResult] = await Promise.all([
-	getExperiencePhotos(experience.id),
-	getReviews({ experienceId: experience.id, limit: 8 }),
-]);
+const { photosResult, reviewsResult, relatedResult, popularDestinations, headerSuggestions } = await getExperiencePageData(experience);
 
 const searchCity = experience.city_id
 	? {
@@ -43,10 +38,6 @@ const searchCity = experience.city_id
 	}
 	: null;
 
-const relatedResult = await getExperiences({
-	limit: 5,
-	cityId: experience.city_id,
-});
 const related = relatedResult.rows.filter((item) => item.id !== experience.id).slice(0, 4);
 const photos = photosResult.rows.filter((item) => item.image_url);
 const reviews = reviewsResult.rows;
@@ -80,7 +71,7 @@ const description =
 	experience.annotation ??
 	experience.tagline ??
 	(cleanText(experience.description_new_html || experience.description_html) || "Экскурсия с гидом.");
-const bookingUrl = `https://experience.tripster.ru/mfs/experience/booking/${experience.id}/`;
+const bookingUrl = `https://experience.tripster.ru/experience/booking/${experience.id}/`;
 const bookingPrice = (experience.price_value_string || "Цена по запросу").replace(/\s*за\s+группу\.?$/i, "");
 const personLabel = (value: number | string | null | undefined) => {
 	const count = Number(value ?? 0);
@@ -104,15 +95,15 @@ const hasGuide = Boolean(
 Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=120");
 ---
 
-<Base title={experience.title} description={description} image={heroImage} searchCity={searchCity ?? undefined}>
+<Base title={experience.title} description={description} image={heroImage} searchCity={searchCity ?? undefined} popularDestinations={popularDestinations} headerSuggestions={headerSuggestions}>
 	<TravelPageStyles />
 
 	<section class="section gallery-first">
 		{
 			displayedGalleryPhotos.length > 0 ? (
 				<div class="photo-grid photo-grid--top">
-					{displayedGalleryPhotos.map((photo) => (
-						<img src={photo.image_url} alt="" loading="lazy" />
+					{displayedGalleryPhotos.map((photo, index) => (
+						<img src={photo.image_url} alt="" loading={index < 3 ? "eager" : "lazy"} fetchpriority={index === 0 ? "high" : "auto"} decoding="async" data-travel-image />
 					))}
 				</div>
 			) : (

@@ -14,6 +14,8 @@ import {
 	getGuides,
 	getReviews,
 	getSeoBlock,
+	getTopCities,
+	getTopCountries,
 } from "../../lib/travel-db.js";
 import { excursionHeroLead } from "../../lib/travel-copy.js";
 
@@ -55,7 +57,7 @@ const pageSize = 24;
 const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
 const currentPage = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1;
 
-const [tagsResult, experiencesResult, statsResult, guidesResult, reviewsResult, seoResult] = await Promise.all([
+const [tagsResult, experiencesResult, statsResult, guidesResult, reviewsResult, seoResult, footerCities, footerCountries] = await Promise.all([
 	isResultsRequest
 		? Promise.resolve({ rows: [], error: null })
 		: getCityTags(city.id),
@@ -73,6 +75,8 @@ const [tagsResult, experiencesResult, statsResult, guidesResult, reviewsResult, 
 		? Promise.resolve({ rows: [], error: null })
 		: getReviews({ limit: 9, cityId: city.id }),
 	getSeoBlock("city", city.id),
+	isResultsRequest ? Promise.resolve({ rows: [] }) : getTopCities(10),
+	isResultsRequest ? Promise.resolve({ rows: [] }) : getTopCountries(10),
 ]);
 
 const tags = tagsResult.rows;
@@ -335,6 +339,7 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-r
 	description={`Экскурсии: ${city.name}`}
 	searchCity={city}
 	headerSuggestions={headerSuggestions}
+	popularDestinations={{ cities: footerCities.rows, countries: footerCountries.rows }}
 >
 	<TravelPageStyles />
 	<section class="page-hero">

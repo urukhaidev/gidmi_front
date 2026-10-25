@@ -5,6 +5,12 @@ import type { QueryResult } from "./travel-types.js";
 const { Pool } = pg;
 
 let pool: InstanceType<typeof Pool> | null = null;
+// Vite reloads server modules during editing. Reuse the existing pool instead
+// of leaving old connections alive and opening another set on every reload.
+const sharedDb = globalThis as typeof globalThis & {
+	__gidmiTravelDb?: { connectionString: string; pool: InstanceType<typeof Pool> };
+	__gidmiTravelDbShutdownRegistered?: boolean;
+};
 
 type CachedQueryResult = {
 	expiresAt: number;
@@ -24,14 +30,20 @@ function getPool(): InstanceType<typeof Pool> | null {
 	if (!connectionString) return null;
 
 	if (!pool) {
+		if (sharedDb.__gidmiTravelDb?.connectionString === connectionString) {
+			pool = sharedDb.__gidmiTravelDb.pool;
+			return pool;
+		}
+		sharedDb.__gidmiTravelDb?.pool.end().catch(() => {});
 		pool = new Pool({
 			connectionString,
 			ssl: { rejectUnauthorized: false },
-			min: 0,
-			max: 5,
+			min: 1,
+			max: import.meta.env.DEV ? 2 : 5,
 			keepAlive: true,
-			idleTimeoutMillis: 60_000,
+			idleTimeoutMillis: 300_000,
 		});
+		sharedDb.__gidmiTravelDb = { connectionString, pool };
 	}
 
 	return pool;
@@ -44,17 +56,19 @@ function getPool(): InstanceType<typeof Pool> | null {
 // ---------------------------------------------------------------------------
 
 function shutdown() {
-	if (pool) {
-		pool.end().catch(() => {});
-		pool = null;
-	}
+	sharedDb.__gidmiTravelDb?.pool.end().catch(() => {});
+	delete sharedDb.__gidmiTravelDb;
+	pool = null;
 }
 
 // Node.js signals — each listener is registered at most once because this
 // module is only evaluated once (ESM module cache).
-process.once("SIGTERM", shutdown);
-process.once("SIGINT", shutdown);
-process.once("beforeExit", shutdown);
+if (!sharedDb.__gidmiTravelDbShutdownRegistered) {
+	sharedDb.__gidmiTravelDbShutdownRegistered = true;
+	process.once("SIGTERM", shutdown);
+	process.once("SIGINT", shutdown);
+	process.once("beforeExit", shutdown);
+}
 
 /**
  * Execute a parameterised SQL query against the Supabase PostgreSQL database.
@@ -72,7 +86,10 @@ export async function query<T = Record<string, unknown>>(
 		return { rows: [], error: "SUPABASE_DATABASE_URL is not configured" };
 	}
 
-	const cacheable = !import.meta.env.DEV && /^\s*(select|with)\b/i.test(sql);
+	// The local site uses the same remote catalogue as production. Keep its
+	// short-lived read cache enabled in dev as well to avoid repeating network
+	// round trips for navigation, city data and identical concurrent requests.
+	const cacheable = /^\s*(select|with)\b/i.test(sql);
 	const cacheKey = cacheable ? `${sql}\u0000${JSON.stringify(params)}` : null;
 	const now = Date.now();
 

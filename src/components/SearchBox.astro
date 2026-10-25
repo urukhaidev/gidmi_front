@@ -454,7 +454,12 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 			if (index !== activeIndex) setActive(index);
 		});
 
-		document.addEventListener("mousedown", (event) => {
+		document.addEventListener("gidmi:close-dropdowns", () => {
+			close();
+			input.blur();
+		});
+
+		document.addEventListener("pointerdown", (event) => {
 			const target = event.target as Node;
 			if (root.contains(target) || list.contains(target)) return;
 			close();

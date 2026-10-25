@@ -11,6 +11,8 @@ import {
 	getExperiences,
 	getGuides,
 	getSeoBlock,
+	getTopCities,
+	getTopCountries,
 } from "../../lib/travel-db.js";
 import { excursionHeroLead } from "../../lib/travel-copy.js";
 
@@ -28,12 +30,14 @@ if (!isRootRewrite && Astro.url.pathname !== preferredPath) {
 	return Astro.redirect(`${preferredPath}${Astro.url.search}`);
 }
 
-const [citiesResult, experiencesResult, statsResult, guidesResult, seoResult] = await Promise.all([
+const [citiesResult, experiencesResult, statsResult, guidesResult, seoResult, footerCities, footerCountries] = await Promise.all([
 	getCountryCities(country.id, 120),
 	getExperiences({ limit: 12, countryId: country.id }),
 	getExperienceStats({ countryId: country.id }),
 	getGuides({ limit: 12, countryId: country.id }),
 	getSeoBlock("country", country.id),
+	getTopCities(10),
+	getTopCountries(10),
 ]);
 
 const cities = citiesResult.rows;
@@ -103,7 +107,7 @@ const countryLead = excursionHeroLead({
 Astro.response.headers.set("Cache-Control", "public, s-maxage=600, stale-while-revalidate=120");
 ---
 
-<Base title={documentTitle} description={`Экскурсии: ${country.name}`}>
+<Base title={documentTitle} description={`Экскурсии: ${country.name}`} popularDestinations={{ cities: footerCities.rows, countries: footerCountries.rows }}>
 	<TravelPageStyles />
 	<section class="page-hero">
 		{country.image_url && <img src={country.image_url} alt="" />}

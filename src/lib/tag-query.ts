@@ -44,11 +44,11 @@ export async function getTag(id: string | undefined): Promise<QueryResult<TagRow
 export async function getCityTags(
 	cityId: string,
 	limit?: number,
-): Promise<QueryResult<TagRow>> {
+): Promise<QueryResult<Pick<TagRow, "id" | "name" | "slug" | "category" | "tag_category" | "group_name" | "experience_count">>> {
 	const limitClause = limit ? "limit $2" : "";
 	const params = limit ? [Number(cityId), limit] : [Number(cityId)];
 
-	return query<TagRow>(
+	return query<Pick<TagRow, "id" | "name" | "slug" | "category" | "tag_category" | "group_name" | "experience_count">>(
 		`
 		with city_categories as (
 			select
@@ -60,11 +60,16 @@ export async function getCityTags(
 			where e.city_id = $1::int
 			group by etn.catalog_id
 		)
-		select ${tagColumns("cat", "cc.experience_count")}
+		select
+			cat.id::text as id,
+			cat.sub_name as name,
+			cat.sub_slug as slug,
+			cat.main_name as category,
+			cat.sub_name as tag_category,
+			cat.main_name as group_name,
+			cc.experience_count
 		from city_categories cc
 		inner join tag_category_catalog cat on cat.id = cc.catalog_id
-		inner join cities city on city.id = $1::int
-		left join countries country on country.id = city.country_id
 		order by
 			cat.main_sort_order asc nulls last,
 			cat.sub_sort_order asc nulls last,

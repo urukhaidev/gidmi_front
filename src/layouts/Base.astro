@@ -8,6 +8,7 @@ import {
 import { createPublicPageContext } from "emdash/page";
 import gidmiLogo from "../assets/gidmi.png";
 import SearchBox from "../components/SearchBox.astro";
+import TravelImageRecovery from "../components/TravelImageRecovery.astro";
 import { legalPages } from "../lib/legal-pages";
 import {
 	cityHref,
@@ -202,12 +203,7 @@ const pageCtx = createPublicPageContext({
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<link rel="preconnect" href="https://fonts.googleapis.com" />
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-		<link
-			href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
-			rel="stylesheet"
-		/>
+		<link rel="stylesheet" href="/fonts/manrope.css" />
 		<link rel="icon" type="image/png" href="/favicon.png" />
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		<title>{fullTitle}</title>
@@ -403,6 +399,7 @@ const pageCtx = createPublicPageContext({
 		</footer>
 
 		<EmDashBodyEnd page={pageCtx} />
+		<TravelImageRecovery />
 		<script is:inline>
 			(() => {
 				const header = document.querySelector(".site-header");
@@ -444,7 +441,7 @@ const pageCtx = createPublicPageContext({
 					}
 				};
 
-				const closePanels = (except) => {
+				const closePanels = (except, sync = true) => {
 					panels.forEach((panel) => {
 						if (panel.dataset.headerPanel === except) return;
 						panel.hidden = true;
@@ -454,7 +451,7 @@ const pageCtx = createPublicPageContext({
 						if (toggle.dataset.headerToggle === except) return;
 						toggle.setAttribute("aria-expanded", "false");
 					});
-					syncScrollLock();
+					if (sync) syncScrollLock();
 				};
 
 				toggles.forEach((toggle) => {
@@ -465,7 +462,8 @@ const pageCtx = createPublicPageContext({
 						if (!panel) return;
 
 						const willOpen = panel.hidden;
-						closePanels(willOpen ? target : undefined);
+						document.dispatchEvent(new CustomEvent("gidmi:close-dropdowns"));
+						closePanels(willOpen ? target : undefined, false);
 						panel.hidden = !willOpen;
 						toggle.setAttribute("aria-expanded", String(willOpen));
 						syncScrollLock();
@@ -479,8 +477,17 @@ const pageCtx = createPublicPageContext({
 				});
 
 				document.addEventListener("click", (event) => {
-					if (header?.contains(event.target)) return;
+					if (header?.contains(event.target)) {
+						if (event.target.closest("a[href]")) closePanels();
+						return;
+					}
 					closePanels();
+				});
+
+				window.addEventListener("pageshow", (event) => {
+					if (!event.persisted) return;
+					closePanels();
+					document.dispatchEvent(new CustomEvent("gidmi:close-dropdowns"));
 				});
 
 				document.addEventListener("keydown", (event) => {
@@ -895,6 +902,12 @@ const pageCtx = createPublicPageContext({
 		:global(html.site-header-lock-scroll),
 		:global(html.site-header-lock-scroll body) {
 			overflow: hidden;
+		}
+
+		:global(html.site-header-lock-scroll) .site-header {
+			position: fixed;
+			inset: 0 0 auto;
+			backdrop-filter: none;
 		}
 
 		.site-header__nav {

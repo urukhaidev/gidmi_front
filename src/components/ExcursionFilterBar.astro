@@ -160,6 +160,18 @@ const hrefFor = (updates: Record<string, string>) => {
 		const heroMediaSelector = "[data-page-hero-media]";
 		const heroSelector = "[data-page-hero-inner]";
 		const seoSelector = "[data-seo-section]";
+		const closeFilters = () => {
+			document.querySelectorAll(".filter-menu[open]").forEach((item) => {
+				item.open = false;
+			});
+		};
+		document.addEventListener("gidmi:close-dropdowns", closeFilters);
+		document.addEventListener("pointerdown", (event) => {
+			if (!event.target.closest(".filter-menu")) closeFilters();
+		});
+		document.addEventListener("keydown", (event) => {
+			if (event.key === "Escape") closeFilters();
+		});
 
 		async function replaceResults(url, shouldPush = true) {
 			const current = document.querySelector(resultsSelector);

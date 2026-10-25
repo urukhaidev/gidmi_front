@@ -52,13 +52,17 @@ export async function getExperiences(
 	return query<ExperienceRow>(
 		`
 		select ${experienceCardColumns}
-		from experiences e
-		${extraJoins.join("\n")}
+		from (
+			select e.*
+			from experiences e
+			${extraJoins.join("\n")}
+			${whereClause}
+			order by ${experienceOrderBy(filters.sort)}
+			limit $${limitParam}
+			offset $${offsetParam}
+		) e
 		${experienceCardJoins}
-		${whereClause}
 		order by ${experienceOrderBy(filters.sort)}
-		limit $${limitParam}
-		offset $${offsetParam}
 		`,
 		params,
 	);

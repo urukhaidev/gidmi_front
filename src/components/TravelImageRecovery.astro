@@ -1,0 +1,14 @@
+<script>
+	// A history restore can keep an image request that was cancelled when the
+	// visitor left. Resume only missing images that are visible on return.
+	window.addEventListener("pageshow", (event) => {
+		document.querySelectorAll<HTMLImageElement>("img[data-travel-image]").forEach((image) => {
+			if (image.complete && image.naturalWidth > 0) return;
+			const rect = image.getBoundingClientRect();
+			if (!rect.width || rect.bottom < 0 || rect.top > window.innerHeight) return;
+			image.loading = "eager";
+			const source = image.getAttribute("src");
+			if (source && (event.persisted || image.complete)) image.src = source;
+		});
+	});
+</script>
