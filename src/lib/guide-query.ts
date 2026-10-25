@@ -31,7 +31,7 @@ export async function getGuides(
 			null::text as last_name,
 			g.url,
 			g.avatar_medium as image_url,
-			g.rating,
+			g.rating::text as rating,
 			g.review_count,
 			g.exp_count_published,
 			g.description,

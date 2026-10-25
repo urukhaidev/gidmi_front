@@ -9,7 +9,7 @@ const reviewColumns = `
 	r.author_name,
 	coalesce(r.avatar_medium_url, r.avatar_small_url) as avatar_url,
 	coalesce(r.created_on::text, r.created_at::date::text, r.created_on_dt::date::text) as created_on,
-	r.rating,
+	r.rating::text as rating,
 	r.text,
 	r.experience_title,
 	e.title,

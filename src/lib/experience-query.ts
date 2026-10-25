@@ -97,7 +97,7 @@ export async function getExperienceStats(
 		)
 		select
 			count(filtered.id)::int as count,
-			min_price.price_value as min_price_value,
+			min_price.price_value::text as min_price_value,
 			min_price.price_currency as min_price_currency,
 			coalesce(sum(filtered.review_count), 0)::int as review_count
 		from filtered

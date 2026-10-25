@@ -52,8 +52,10 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-r
 					<ul class="city-list">
 						{otherCities.map((city) => (
 							<li>
-								<a href={cityHref(city)}>{city.name}</a>
-								<span>{formatCount(city.experience_count)}</span>
+								<a href={cityHref(city)}>
+									{city.name}
+									<span>{formatCount(city.experience_count)}</span>
+								</a>
 							</li>
 						))}
 					</ul>
@@ -89,21 +91,26 @@ Astro.response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-r
 		}
 
 		.city-list li {
-			display: flex;
-			gap: 12px;
-			justify-content: space-between;
-			padding: 12px 0;
 			border-bottom: 1px solid rgba(31, 36, 32, 0.1);
 		}
 
 		.city-list a {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			justify-content: space-between;
+			box-sizing: border-box;
+			min-height: 44px;
+			padding: 12px 0;
 			color: #1f2420;
 			font-weight: 750;
 			text-decoration: none;
 		}
 
 		.city-list span {
+			flex-shrink: 0;
 			color: #687067;
+			font-weight: 400;
 		}
 
 		@media (max-width: 1060px) {

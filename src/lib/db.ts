@@ -1,5 +1,6 @@
 // @ts-expect-error — pg ships no declaration file; @types/pg is optional
 import pg from "pg";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { QueryResult } from "./travel-types.js";
 
 const { Pool } = pg;
@@ -21,6 +22,60 @@ const queryCache = new Map<string, CachedQueryResult>();
 const pendingQueries = new Map<string, Promise<QueryResult<unknown>>>();
 const QUERY_CACHE_TTL_MS = 120_000;
 const QUERY_CACHE_MAX_ENTRIES = 300;
+
+type BatchedRead = {
+	sql: string;
+	params: unknown[];
+	execute: () => Promise<QueryResult<unknown>>;
+	resolve: (result: QueryResult<unknown>) => void;
+};
+type ReadBatch = { reads: BatchedRead[]; scheduled: boolean };
+const readBatches = new AsyncLocalStorage<ReadBatch>();
+
+/**
+ * Fetch independent public catalogue reads in one database round trip.
+ * NUMERIC columns in these projections use ::text to retain pg's string
+ * values (including decimal precision) when the rows are packed as JSON.
+ */
+export function withQueryBatch<T>(load: () => Promise<T>): Promise<T> {
+	return readBatches.run({ reads: [], scheduled: false }, load);
+}
+
+async function flushReadBatch(batch: ReadBatch) {
+	const reads = batch.reads.splice(0);
+	batch.scheduled = false;
+	if (reads.length === 1) {
+		reads[0].resolve(await reads[0].execute());
+		return;
+	}
+	try {
+		const params: unknown[] = [];
+		const columns = reads.map((read, index) => {
+			const offset = params.length;
+			const sql = read.sql.replace(/;\s*$/, "").replace(/\$(\d+)\b/g, (_, number) => `$${Number(number) + offset}`);
+			params.push(...read.params);
+			return `(select coalesce(jsonb_agg(to_jsonb(batch_row)), '[]'::jsonb)
+				from (${sql}) batch_row) as q${index}`;
+		});
+		const db = getPool();
+		if (!db) throw new Error("Database is not configured");
+		const result = await db.query(`select ${columns.join(",\n")}`, params);
+		reads.forEach((read, index) => read.resolve({ rows: result.rows[0][`q${index}`], error: null }));
+	} catch {
+		// Preserve partial results if one catalogue query fails: retry each read
+		// independently, using the same error handling as an ordinary query.
+		await Promise.all(reads.map(async (read) => read.resolve(await read.execute())));
+	}
+}
+
+function queueRead(batch: ReadBatch, read: Omit<BatchedRead, "resolve">): Promise<QueryResult<unknown>> {
+	return new Promise((resolve) => {
+		batch.reads.push({ ...read, resolve });
+		if (batch.scheduled) return;
+		batch.scheduled = true;
+		queueMicrotask(() => { void flushReadBatch(batch); });
+	});
+}
 
 function getPool(): InstanceType<typeof Pool> | null {
 	const connectionString: string | undefined =
@@ -115,7 +170,10 @@ export async function query<T = Record<string, unknown>>(
 		}
 	};
 
-	const request = execute();
+	const batch = readBatches.getStore();
+	const request = batch && cacheable
+		? queueRead(batch, { sql, params, execute }) as Promise<QueryResult<T>>
+		: execute();
 	if (cacheKey) pendingQueries.set(cacheKey, request as Promise<QueryResult<unknown>>);
 
 	try {

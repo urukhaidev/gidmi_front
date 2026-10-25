@@ -98,3 +98,4 @@ export async function getHomeTravelData(searchText: string, countryLimit = 30, c
 		].filter((e): e is string => e !== null),
 	};
 }
+export { withQueryBatch } from "./db.js";

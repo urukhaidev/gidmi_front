@@ -286,10 +286,15 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 			open();
 		};
 
-		const setActive = (index: number) => {
+		const setActive = (index: number, scrollIntoView = false) => {
 			activeIndex = index;
 			input.setAttribute("aria-activedescendant", `${input.id}-opt-${index}`);
-			render();
+			list.querySelectorAll<HTMLElement>("[data-search-index]").forEach((item) => {
+				const isActive = Number(item.dataset.searchIndex) === index;
+				item.setAttribute("aria-selected", String(isActive));
+				item.classList.toggle(item.classList.contains("ts-mini") ? "ts-mini--active" : "ts-item--active", isActive);
+				if (isActive && scrollIntoView) item.scrollIntoView({ block: "nearest" });
+			});
 		};
 
 		const navigate = (index: number) => {
@@ -430,12 +435,12 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 
 			if (event.key === "ArrowDown") {
 				event.preventDefault();
-				setActive(activeIndex < navigationItems.length - 1 ? activeIndex + 1 : 0);
+				setActive(activeIndex < navigationItems.length - 1 ? activeIndex + 1 : 0, true);
 			}
 
 			if (event.key === "ArrowUp") {
 				event.preventDefault();
-				setActive(activeIndex > 0 ? activeIndex - 1 : navigationItems.length - 1);
+				setActive(activeIndex > 0 ? activeIndex - 1 : navigationItems.length - 1, true);
 			}
 
 		});
@@ -447,7 +452,8 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 			navigate(Number(item.dataset.searchIndex));
 		});
 
-		list.addEventListener("mousemove", (event) => {
+		list.addEventListener("pointermove", (event) => {
+			if (event.pointerType !== "mouse") return;
 			const item = (event.target as HTMLElement).closest<HTMLElement>("[data-search-index]");
 			if (!item) return;
 			const index = Number(item.dataset.searchIndex);
