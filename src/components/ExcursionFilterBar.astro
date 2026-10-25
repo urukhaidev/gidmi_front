@@ -74,7 +74,7 @@ const hrefFor = (updates: Record<string, string>) => {
 ---
 
 <div class="excursion-filter-bar" data-excursion-filters>
-	<details class="filter-menu">
+	<details class="filter-menu" name="excursion-filter">
 		<summary>Любые даты, {current.persons} чел. <span aria-hidden="true">▾</span></summary>
 		<div class="filter-menu__list">
 			<span class="filter-menu__note">Дата: любые</span>
@@ -90,7 +90,7 @@ const hrefFor = (updates: Record<string, string>) => {
 		</div>
 	</details>
 
-	<details class="filter-menu">
+	<details class="filter-menu" name="excursion-filter">
 		<summary>{selectedLabel(formatOptions, current.format)} <span aria-hidden="true">▾</span></summary>
 		<div class="filter-menu__list">
 			{formatOptions.map((option) => (
@@ -105,7 +105,7 @@ const hrefFor = (updates: Record<string, string>) => {
 		</div>
 	</details>
 
-	<details class="filter-menu">
+	<details class="filter-menu" name="excursion-filter">
 		<summary>{selectedLabel(movementOptions, current.movement)} <span aria-hidden="true">▾</span></summary>
 		<div class="filter-menu__list">
 			{movementOptions.map((option) => (
@@ -120,7 +120,7 @@ const hrefFor = (updates: Record<string, string>) => {
 		</div>
 	</details>
 
-	<details class="filter-menu">
+	<details class="filter-menu" name="excursion-filter">
 		<summary>{selectedLabel(priceOptions, current.price)} <span aria-hidden="true">▾</span></summary>
 		<div class="filter-menu__list">
 			{priceOptions.map((option) => (
@@ -135,7 +135,7 @@ const hrefFor = (updates: Record<string, string>) => {
 		</div>
 	</details>
 
-	<details class="filter-menu">
+	<details class="filter-menu" name="excursion-filter">
 		<summary>↕ {selectedLabel(sortOptions, current.sort)} <span aria-hidden="true">▾</span></summary>
 		<div class="filter-menu__list">
 			{sortOptions.map((option) => (

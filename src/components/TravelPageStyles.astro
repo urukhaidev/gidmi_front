@@ -29,6 +29,11 @@
 		overflow: hidden;
 	}
 
+	.page-hero:has(.ts-wrap) {
+		overflow: visible;
+		z-index: 2;
+	}
+
 	.page-hero img {
 		position: absolute;
 		inset: 0;
@@ -435,10 +440,29 @@
 		}
 
 		.excursion-filter-bar {
-			flex-wrap: nowrap;
-			overflow-x: auto;
+			position: relative;
+			z-index: 3;
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			overflow: visible;
 			margin-bottom: 18px;
 			padding-bottom: 4px;
+		}
+
+		.excursion-filter-bar .filter-menu {
+			position: static;
+			min-width: 0;
+		}
+
+		.excursion-filter-bar .filter-menu:first-child {
+			grid-column: 1 / -1;
+		}
+
+		.excursion-filter-bar .filter-menu__list {
+			right: 0;
+			min-width: 0;
+			max-height: min(360px, 60dvh);
+			overflow-y: auto;
 		}
 
 		.category-panel > .category-filter-list {
@@ -456,8 +480,11 @@
 		}
 
 		.filter-menu summary {
+			display: flex;
+			justify-content: space-between;
+			gap: 6px;
 			min-height: 42px;
-			padding: 0 14px;
+			padding: 0 10px;
 			font-size: 0.95rem;
 		}
 
