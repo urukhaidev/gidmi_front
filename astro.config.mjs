@@ -1,11 +1,14 @@
 import node from "@astrojs/node";
 import react from "@astrojs/react";
-import { defineConfig } from "astro/config";
+import { defineConfig, memoryCache } from "astro/config";
 import emdash, { local } from "emdash/astro";
 import { sqlite } from "emdash/db";
 
 export default defineConfig({
 	output: "server",
+	experimental: {
+		cache: { provider: memoryCache() },
+	},
 	adapter: node({
 		mode: "standalone",
 	}),

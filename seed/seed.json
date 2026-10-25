@@ -13,8 +13,9 @@
 	"collections": [
 		{
 			"slug": "posts",
-			"label": "Posts",
-			"labelSingular": "Post",
+			"label": "Статьи",
+			"labelSingular": "Статья",
+			"urlPattern": "/blog/{slug}",
 			"supports": ["drafts", "revisions", "search", "seo"],
 			"fields": [
 				{
@@ -112,8 +113,8 @@
 				},
 				{
 					"type": "custom",
-					"label": "Posts",
-					"url": "/posts"
+					"label": "Блог",
+					"url": "/blog"
 				},
 				{
 					"type": "custom",

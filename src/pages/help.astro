@@ -1,27 +1,34 @@
 ---
-import Base from "../layouts/Base.astro";
+import InformationPage from "../layouts/InformationPage.astro";
+
+const questions = [
+	{ question: "Как найти экскурсию?", answer: "Введите название города или интересующего маршрута в поиске. Также можно открыть список стран или городов и выбрать направление." },
+	{ question: "Где посмотреть стоимость и программу?", answer: "Откройте страницу экскурсии: там собраны описание маршрута, продолжительность, формат, цена и отзывы. Перед оформлением заказа проверьте актуальные условия на странице бронирования." },
+	{ question: "Как забронировать экскурсию?", answer: "Выберите экскурсию и нажмите кнопку бронирования на её странице. Дальнейшее оформление проходит в сервисе бронирования, куда ведёт эта кнопка." },
+	{ question: "К кому обратиться по уже оформленному заказу?", answer: "Обратитесь в сервис, где вы оформили бронирование. Контактная информация обычно указана в подтверждении заказа. Подготовьте номер заказа и название экскурсии." },
+	{ question: "Как сообщить об ошибке на сайте?", answer: "Перейдите в раздел «Контакты». Для обращения подготовьте ссылку на страницу и короткое описание проблемы." },
+];
 ---
 
-<Base title="Помощь" pageTitle="Помощь">
-	<section class="utility-page">
-		<h1>Помощь</h1>
-		<p>В этом разделе будут ответы на частые вопросы путешественников.</p>
-	</section>
-</Base>
+<InformationPage title="Помощь" description="Ответы на вопросы о поиске и выборе экскурсий на Гидми.">
+	<p>Собрали первые ответы на вопросы о Гидми. Этот раздел будет дополняться.</p>
+	<div class="help-questions">
+		{questions.map((item) => (
+			<details>
+				<summary>{item.question}</summary>
+				<p>{item.answer}</p>
+			</details>
+		))}
+	</div>
+	<h2>Не нашли ответ?</h2>
+	<p>Перейдите на страницу <a href="/contacts">«Контакты»</a>, чтобы узнать о способах связи с командой проекта.</p>
+</InformationPage>
 
 <style>
-	.utility-page {
-		max-width: 720px;
-		margin: 0 auto;
-		padding: 64px var(--site-gutter);
-	}
-
-	.utility-page h1 {
-		margin: 0 0 12px;
-	}
-
-	.utility-page p {
-		margin: 0;
-		color: #687067;
-	}
+	.help-questions { display: grid; gap: 12px; margin: 28px 0; }
+	.help-questions details { padding: 20px 24px; border: 1px solid #e3e8ed; border-radius: 12px; }
+	.help-questions summary { cursor: pointer; font-weight: 600; line-height: 1.6; }
+	.help-questions summary:focus-visible { outline: 2px solid #0486fe; outline-offset: 5px; }
+	.help-questions details[open] summary { margin-bottom: 14px; color: #0475df; }
+	.help-questions p { margin-bottom: 0; }
 </style>

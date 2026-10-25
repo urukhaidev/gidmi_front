@@ -1,0 +1,86 @@
+---
+import SearchBox from "./SearchBox.astro";
+interface Props { image?: string | null; }
+const { image: heroImage } = Astro.props;
+---
+
+	<section class="home-intro" aria-labelledby="home-title" style="display: grid; position: relative; visibility: visible;">
+		<div class="home-intro__bg">
+			{heroImage && <img class="home-intro__image" src={heroImage} alt="" loading="eager" fetchpriority="high" />}
+			<div class="home-intro__shade"></div>
+		</div>
+		<div class="home-intro__inner">
+			<h1 id="home-title">Гидми - экскурсии по всему миру</h1>
+		<p class="home-intro__lead">
+			Найдите страну, город или экскурсию и выберите маршрут по рейтингу,
+			цене и отзывам.
+		</p>
+
+			<SearchBox variant="hero" placeholder="Куда вы собираетесь?" />
+		</div>
+	</section>
+
+<style>
+		.home-intro {
+			position: relative;
+			min-height: 620px;
+			display: grid;
+			align-items: center;
+			background:
+				linear-gradient(135deg, #0486fe, #7f6749 58%, #25332e),
+				#0486fe;
+		}
+
+		.home-intro__bg {
+			position: absolute;
+			inset: 0;
+			overflow: hidden;
+			pointer-events: none;
+		}
+
+		.home-intro__image {
+			position: absolute;
+			inset: 0;
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		.home-intro__shade {
+			position: absolute;
+			inset: 0;
+			background:
+				linear-gradient(90deg, rgba(12, 18, 16, 0.82), rgba(12, 18, 16, 0.35)),
+				linear-gradient(0deg, rgba(12, 18, 16, 0.62), rgba(12, 18, 16, 0.08));
+		}
+
+		.home-intro__inner {
+			position: relative;
+			z-index: 1;
+			width: min(var(--site-content-max), calc(100% - (var(--site-gutter) * 2)));
+			margin: 0 auto;
+			padding: 96px 0;
+			color: #fff;
+		}
+
+		.home-intro__lead {
+			max-width: 690px;
+			margin: 24px 0 0;
+			color: rgba(255, 255, 255, 0.86);
+			font-size: 1.18rem;
+			line-height: 1.65;
+		}
+
+		h1 {
+			max-width: 820px;
+			margin: 0;
+			font-size: clamp(2rem, 3.5vw, 3rem);
+			line-height: 0.94;
+			letter-spacing: 0;
+		}
+	@media (max-width: 760px) {
+		.home-intro { min-height: 440px; }
+		.home-intro__inner { padding: 42px 0 34px; }
+	}
+
+</style>

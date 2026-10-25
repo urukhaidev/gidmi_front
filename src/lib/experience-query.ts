@@ -18,13 +18,18 @@ import type {
 export async function getPopularExperiences(
 	limit = 12,
 ): Promise<QueryResult<ExperienceRow>> {
+	// Apply LIMIT before the photo lookup so it runs only for visible cards.
 	return query<ExperienceRow>(
 		`
 		select ${experienceCardColumns}
-		from experiences e
+		from (
+			select e.*
+			from experiences e
+			order by ${experienceOrderBy("popular")}
+			limit $1
+		) e
 		${experienceCardJoins}
 		order by ${experienceOrderBy("popular")}
-		limit $1
 		`,
 		[limit],
 	);

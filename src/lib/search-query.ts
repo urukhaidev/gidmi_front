@@ -5,6 +5,7 @@ import type { QueryResult, SearchResultRow } from "./travel-types.js";
 export async function searchTravel(
 	queryText: string | null | undefined,
 	limit = 18,
+	scope: "all" | "destinations" = "all",
 ): Promise<QueryResult<SearchResultRow>> {
 	const normalized = queryText?.trim();
 
@@ -19,6 +20,33 @@ export async function searchTravel(
 
 	return query<SearchResultRow>(
 		`
+		with matching_categories as materialized (
+			select id, sub_name, sub_slug
+			from tag_category_catalog cat
+			where $3::boolean and (cat.main_name ilike $1
+				or cat.sub_name ilike $1
+				or cat.title ilike $1
+				or cat.header ilike $1
+				or cat.main_slug ilike $1
+				or cat.sub_slug ilike $1
+				or array_to_string(cat.lexical_triggers, ' ') ilike $1)
+		), matching_tags as materialized (
+			select etn.catalog_id, etn.experience_id
+			from matching_categories cat
+			join experience_tags_new etn on etn.catalog_id = cat.id
+		), category_counts as (
+			select etn.catalog_id as id, e.city_id, count(*)::int as count
+			from matching_tags etn
+			join experiences e on e.id = etn.experience_id
+			join cities city on city.id = e.city_id
+			group by etn.catalog_id, e.city_id
+		), ranked_categories as (
+			select cat.*, counts.city_id, counts.count
+			from category_counts counts
+			join matching_categories cat on cat.id = counts.id
+			order by counts.count desc, cat.sub_name asc
+			limit $2
+		)
 		select * from (
 			select
 				'country' as type,
@@ -71,7 +99,7 @@ export async function searchTravel(
 					coalesce(nullif(${citySlug("city")}, ''), city.id::text) || '/' ||
 					coalesce(nullif(cat.sub_slug, ''), cat.id::text) as url,
 				null::text as image_url,
-				count(*)::int as count,
+				cat.count,
 				city.id::text as city_id,
 				${citySlug("city")} as city_slug,
 				${displayName("city", "Город")} as city_name,
@@ -79,34 +107,9 @@ export async function searchTravel(
 				country.url as country_url,
 				${countrySlug("country")} as country_slug,
 				3 as sort_group
-			from tag_category_catalog cat
-			inner join experience_tags_new etn on etn.catalog_id = cat.id
-			inner join experiences tagged_experience on tagged_experience.id = etn.experience_id
-			inner join cities city on city.id = tagged_experience.city_id
+			from ranked_categories cat
+			inner join cities city on city.id = cat.city_id
 			left join countries country on country.id = city.country_id
-			where
-				cat.main_name ilike $1
-				or cat.sub_name ilike $1
-				or cat.title ilike $1
-				or cat.header ilike $1
-				or cat.main_slug ilike $1
-				or cat.sub_slug ilike $1
-				or array_to_string(cat.lexical_triggers, ' ') ilike $1
-			group by
-				cat.id,
-				cat.sub_name,
-				cat.sub_slug,
-				city.id,
-				city.name_ru,
-				city.name_en,
-				city.page_slug,
-				city.slug,
-				city.url,
-				city.country_id,
-				country.id,
-				country.url,
-				country.page_slug
-			having count(*) > 0
 
 			union all
 
@@ -129,15 +132,19 @@ export async function searchTravel(
 				country.url as country_url,
 				${countrySlug("country")} as country_slug,
 				4 as sort_group
-			from experiences e
+			from (
+				select e.* from experiences e
+				where $3::boolean and ${experienceSearchText} ilike $1
+				order by coalesce(e.review_count, 0) desc, e.title asc
+				limit $2
+			) e
 			left join cities city on city.id = e.city_id
 			left join countries country on country.id = e.country_id
-			where ${experienceSearchText} ilike $1
 		) results
 		order by sort_group asc, count desc nulls last, title asc
 		limit $2
 		`,
-		[pattern, limit],
+		[pattern, limit, scope === "all"],
 	);
 }
 
@@ -220,16 +227,20 @@ export async function getCitySearchExperiences(
 			e.review_count,
 			${citySlug("city")} as city_slug,
 			${countrySlug("country")} as country_slug
-		from experiences e
+		from (
+			select e.* from experiences e
+			where e.city_id = $1::int
+			order by e.rating desc nulls last, e.review_count desc nulls last,
+				e.visitors_count desc nulls last, e.id desc
+			limit $2
+		) e
 		left join cities city on city.id = e.city_id
 		left join countries country on country.id = e.country_id
-		where e.city_id = $1::int
 		order by
 			e.rating desc nulls last,
 			e.review_count desc nulls last,
 			e.visitors_count desc nulls last,
 			e.id desc
-		limit $2
 		`,
 		[Number(cityId), limit],
 	);

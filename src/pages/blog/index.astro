@@ -1,0 +1,65 @@
+---
+import { getEmDashCollection, getTermsForEntries, getTerm } from "emdash";
+import Base from "../../layouts/Base.astro";
+import BlogCard from "../../components/BlogCard.astro";
+
+const cursor = Astro.url.searchParams.get("cursor") || undefined;
+const category = Astro.url.searchParams.get("category") || undefined;
+const tag = Astro.url.searchParams.get("tag") || undefined;
+const term = category ? await getTerm("category", category) : tag ? await getTerm("tag", tag) : null;
+if ((category || tag) && !term) return Astro.rewrite("/404");
+
+const { entries: posts, cacheHint, nextCursor, error } = await getEmDashCollection("posts", {
+	status: "published",
+	limit: 12,
+	cursor,
+	orderBy: { published_at: "desc" },
+	where: { ...(category ? { category } : {}), ...(tag ? { tag } : {}) },
+});
+Astro.cache.set(cacheHint);
+if (error) Astro.response.status = 503;
+const tagsByEntry = posts.length ? await getTermsForEntries("posts", posts.map((post) => post.data.id), "tag") : new Map();
+const nextParams = new URLSearchParams(Astro.url.searchParams);
+if (nextCursor) nextParams.set("cursor", nextCursor);
+const firstParams = new URLSearchParams(Astro.url.searchParams);
+firstParams.delete("cursor");
+const canonical = new URL(`/blog${Astro.url.search}`, Astro.url.origin).href;
+---
+
+<Base title={term ? `${term.label} — Блог` : "Блог"} description="Идеи для поездок, интересные места и советы о выборе экскурсий в блоге Гидми." canonical={canonical}>
+	<div class="blog-index">
+		<nav class="blog-breadcrumbs" aria-label="Хлебные крошки"><a href="/">Главная</a><span aria-hidden="true">/</span><span>Блог</span></nav>
+		<header class="blog-index__intro">
+			<span class="blog-index__eyebrow">Журнал путешествий</span>
+			<h1>{term ? term.label : "Блог Гидми"}</h1>
+			<p>Идеи для новых маршрутов, истории о городах и советы, которые пригодятся в поездке.</p>
+			{term && <a href="/blog">Все статьи →</a>}
+		</header>
+		{error ? <p class="blog-index__empty" role="status">Не удалось загрузить статьи. Попробуйте обновить страницу позже.</p>
+			: posts.length === 0 ? <div class="blog-index__empty"><h2>{term ? "Статей по этой теме пока нет" : "Новые истории уже в пути"}</h2><p>Здесь появятся статьи о путешествиях и экскурсиях.</p><a href="/cities">Пока посмотреть направления →</a></div>
+			: <div class="blog-index__grid">{posts.map((post) => <BlogCard post={post} tags={tagsByEntry.get(post.data.id) ?? []} />)}</div>}
+		{(cursor || nextCursor) && <nav class="blog-pagination" aria-label="Страницы блога">
+			{cursor && <a href={`/blog${firstParams.size ? `?${firstParams}` : ""}`}>К первым статьям</a>}
+			{nextCursor && <a href={`/blog?${nextParams}`}>Следующие статьи →</a>}
+		</nav>}
+	</div>
+</Base>
+
+<style>
+	.blog-index { max-width: var(--site-content-max); margin: 0 auto; padding: 40px var(--site-gutter) 64px; font-family: Manrope, ui-sans-serif, system-ui, sans-serif; color: #1f2420; }
+	.blog-breadcrumbs { display: flex; gap: 8px; font-size: 13px; color: #687067; }
+	.blog-breadcrumbs a { color: inherit; }
+	.blog-index__intro { padding: 40px 0; }
+	.blog-index__eyebrow { color: #0475df; font-size: 13px; font-weight: 700; }
+	.blog-index h1 { margin: 12px 0 16px; font-size: clamp(32px, 4vw, 48px); line-height: 1.2; }
+	.blog-index__intro p { max-width: 640px; margin: 0 0 16px; color: #596259; font-size: 18px; line-height: 1.7; }
+	.blog-index a { text-underline-offset: 3px; }
+	.blog-index__intro > a, .blog-index__empty a { color: #0475df; }
+	.blog-index__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+	.blog-index__empty { padding: 36px; border-radius: 14px; background: #f4f8fb; line-height: 1.7; }
+	.blog-index__empty h2 { margin: 0 0 12px; font-size: 24px; }
+	.blog-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; margin-top: 32px; }
+	.blog-pagination a { padding: 12px 18px; border: 1px solid #d5e3ef; border-radius: 8px; color: #0475df; text-decoration: none; }
+	@media (max-width: 1000px) { .blog-index__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+	@media (max-width: 600px) { .blog-index__grid { grid-template-columns: 1fr; } .blog-index__intro { padding: 28px 0; } }
+</style>

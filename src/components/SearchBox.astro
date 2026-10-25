@@ -30,6 +30,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 				</svg>
 			</span>
 		)}
+		<span class="ts-spinner" aria-hidden="true" hidden data-search-spinner></span>
 		<input
 			id={`${searchId}-input`}
 			name="q"
@@ -41,7 +42,6 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 			aria-controls={listId}
 			data-search-input
 	/>
-		<span class="ts-spinner" aria-hidden="true" hidden data-search-spinner></span>
 		{showSubmit && (
 			<button type="submit" aria-label="Найти">
 				<svg viewBox="0 0 24 24" aria-hidden="true">
@@ -98,6 +98,8 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 	type NavigationItem = {
 		url: string;
 	};
+	type SearchPayload = { results?: SearchResult[]; citySearch?: CitySearch };
+	const searchCache = new Map<string, { expiresAt: number; data: SearchPayload }>();
 
 	const typeLabels: Record<SearchResult["type"], string> = {
 		country: "Страна",
@@ -234,6 +236,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 
 		const setLoading = (loading: boolean) => {
 			spinner.hidden = !loading;
+			root.setAttribute("aria-busy", String(loading));
 		};
 
 		const render = () => {
@@ -299,6 +302,10 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 			window.clearTimeout(timer);
 			controller?.abort();
 			const version = ++requestVersion;
+			close();
+			navigationItems = [];
+			results = [];
+			citySearch = null;
 
 			const query = value.trim();
 			if (query.length < 3) {
@@ -309,6 +316,17 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 				return;
 			}
 
+			const cacheKey = query.toLocaleLowerCase("ru-RU");
+			const cached = searchCache.get(cacheKey);
+			if (cached && cached.expiresAt > Date.now()) {
+				results = cached.data.results ?? [];
+				citySearch = cached.data.citySearch ?? null;
+				activeIndex = -1;
+				setLoading(false);
+				render();
+				return;
+			}
+
 			setLoading(true);
 
 			timer = window.setTimeout(async () => {
@@ -316,22 +334,43 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 				controller = requestController;
 
 				try {
-					const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+					const searchUrl = `/api/search?q=${encodeURIComponent(query)}`;
+					const response = await fetch(`${searchUrl}&details=0`, {
 						signal: requestController.signal,
 						headers: { Accept: "application/json" },
 					});
 
 					if (!response.ok) throw new Error("Search request failed");
 
-					const data = await response.json() as {
-						results?: SearchResult[];
-						citySearch?: CitySearch;
-					};
-					if (version === requestVersion) {
+					let data = await response.json() as SearchPayload;
+					if (version === requestVersion && document.activeElement === input) {
 						results = data.results ?? [];
 						citySearch = data.citySearch ?? null;
 						activeIndex = -1;
 						render();
+						setLoading(false);
+					}
+					// Show matches first; enrich the list without blocking suggestions.
+					if (version === requestVersion && data.results?.some((item) => item.type !== "country")) {
+						try {
+							const details = await fetch(searchUrl, {
+								signal: requestController.signal,
+								headers: { Accept: "application/json" },
+							});
+							if (details.ok) {
+								data = await details.json() as SearchPayload;
+								if (version === requestVersion && document.activeElement === input && !list.hidden && activeIndex < 0) {
+									results = data.results ?? [];
+									citySearch = data.citySearch ?? null;
+									activeIndex = -1;
+									render();
+								}
+							}
+						} catch { /* Keep usable matches if optional details fail. */ }
+					}
+					if (!requestController.signal.aborted) {
+						if (searchCache.size >= 80) searchCache.delete(searchCache.keys().next().value!);
+						searchCache.set(cacheKey, { expiresAt: Date.now() + 30_000, data });
 					}
 				} catch (error) {
 					if (!requestController.signal.aborted && version === requestVersion) {
@@ -343,7 +382,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 				} finally {
 					if (!requestController.signal.aborted && version === requestVersion) setLoading(false);
 				}
-			}, 350);
+			}, 200);
 		};
 
 		input.addEventListener("input", () => search(input.value));
@@ -510,7 +549,7 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 		min-width: 0;
 		height: 52px;
 		border: 0;
-		padding: 0 48px 0 18px;
+		padding: 0 18px 0 42px;
 		color: #1f2420;
 		background: transparent;
 		font-family: inherit;
@@ -568,11 +607,12 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 
 	.ts-spinner {
 		position: absolute;
-		top: calc(50% - 11px);
-		right: 76px;
-		width: 22px;
-		height: 22px;
-		border: 3px solid rgba(31, 115, 201, 0.18);
+		top: calc(50% - 8px);
+		left: 20px;
+		width: 16px;
+		height: 16px;
+		box-sizing: border-box;
+		border: 2px solid rgba(31, 115, 201, 0.18);
 		border-top-color: #0486fe;
 		border-radius: 50%;
 		animation: ts-spin 0.6s linear infinite;
@@ -580,7 +620,11 @@ const listId = resultsListId ?? `${searchId}-listbox`;
 
 	.ts-wrap--header .ts-spinner {
 		top: calc(50% - 8px);
-		right: 10px;
+		left: 4px;
+	}
+
+	.ts-wrap--header[aria-busy="true"] .ts-search-icon {
+		visibility: hidden;
 	}
 
 	.ts-spinner[hidden],

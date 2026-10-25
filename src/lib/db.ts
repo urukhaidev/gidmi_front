@@ -30,6 +30,7 @@ function getPool(): InstanceType<typeof Pool> | null {
 			min: 0,
 			max: 5,
 			keepAlive: true,
+			idleTimeoutMillis: 60_000,
 		});
 	}
 

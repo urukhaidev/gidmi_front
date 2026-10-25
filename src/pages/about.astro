@@ -1,0 +1,28 @@
+---
+import InformationPage from "../layouts/InformationPage.astro";
+---
+
+<InformationPage title="О нас" description="Гидми — экскурсии, города и маршруты для путешествий.">
+	<p class="about-lead">Помогаем найти интересные места и выбрать экскурсию для следующего путешествия.</p>
+	<h2>Знакомьтесь, Гидми</h2>
+	<p>Мы собираем направления и экскурсии в одном месте, чтобы планировать поездку было удобнее. Начните со страны или города, познакомьтесь с маршрутами и выберите то, что вам интересно.</p>
+	<div class="about-links">
+		<a href="/countries"><strong>Открывайте страны <span aria-hidden="true">→</span></strong><span>Выберите направление для будущей поездки.</span></a>
+		<a href="/cities"><strong>Исследуйте города <span aria-hidden="true">→</span></strong><span>Найдите прогулки, поездки и необычные маршруты.</span></a>
+	</div>
+	<h2>Как выбрать экскурсию</h2>
+	<p>Посмотрите описание, продолжительность, формат, стоимость и отзывы. Когда определитесь с маршрутом, перейдите к бронированию со страницы экскурсии.</p>
+	<h2>Проект развивается</h2>
+	<p>Это первая версия страницы о проекте. Здесь появятся наша история, команда и подробности работы Гидми.</p>
+	<p>Есть вопрос или предложение? Загляните в раздел <a href="/contacts">«Контакты»</a>.</p>
+</InformationPage>
+
+<style>
+	.about-lead { font-size: 20px; }
+	.about-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 28px 0; }
+	.about-links a { display: grid; gap: 12px; padding: 24px; border: 1px solid #e3e8ed; border-radius: 12px; text-decoration: none; }
+	.about-links a:hover { border-color: #79beff; background: #fafcfe; }
+	.about-links strong { display: flex; justify-content: space-between; gap: 12px; }
+	.about-links a > span { color: #596259; line-height: 1.7; }
+	@media (max-width: 600px) { .about-links { grid-template-columns: 1fr; } }
+</style>

@@ -1,27 +1,15 @@
 ---
-import Base from "../layouts/Base.astro";
+import InformationPage from "../layouts/InformationPage.astro";
+import PlaceholderPanel from "../components/PlaceholderPanel.astro";
 ---
 
-<Base title="Избранное" pageTitle="Избранное">
-	<section class="utility-page">
-		<h1>Избранное</h1>
-		<p>Здесь будут сохранённые экскурсии.</p>
-	</section>
-</Base>
-
-<style>
-	.utility-page {
-		max-width: 720px;
-		margin: 0 auto;
-		padding: 64px var(--site-gutter);
-	}
-
-	.utility-page h1 {
-		margin: 0 0 12px;
-	}
-
-	.utility-page p {
-		margin: 0;
-		color: #687067;
-	}
-</style>
+<InformationPage title="Избранное" description="Место для ваших любимых экскурсий и планов на поездку.">
+	<p>Все идеи для будущих путешествий — в одном месте.</p>
+	<PlaceholderPanel
+		icon="heart"
+		title="Скоро здесь будут ваши любимые маршруты"
+		text="Готовим возможность сохранять понравившиеся экскурсии и возвращаться к ним перед поездкой. А пока можно познакомиться с направлениями и выбрать город."
+		actionLabel="Посмотреть направления"
+		actionHref="/countries"
+	/>
+</InformationPage>

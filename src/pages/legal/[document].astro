@@ -1,0 +1,17 @@
+---
+import InformationPage from "../../layouts/InformationPage.astro";
+import { legalPages } from "../../lib/legal-pages";
+
+const page = legalPages.find((item) => item.slug === Astro.params.document);
+if (!page) return Astro.rewrite("/404");
+---
+
+<InformationPage title={page.title} description={page.description} draft>
+	{page.sections.map((section, index) => (
+		<section>
+			<h2>{index + 1}. {section.title}</h2>
+			<p>{section.text}</p>
+		</section>
+	))}
+	<p>Контактная информация: <a href="/contacts">страница «Контакты»</a>.</p>
+</InformationPage>

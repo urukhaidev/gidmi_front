@@ -14,8 +14,8 @@ A general-purpose starting point for building sites with [EmDash](https://github
 | Page | Route |
 |---|---|
 | Homepage | `/` |
-| All posts | `/posts` |
-| Single post | `/posts/:slug` |
+| All posts | `/blog` |
+| Single post | `/blog/:slug` |
 | Category archive | `/category/:slug` |
 | Tag archive | `/tag/:slug` |
 | Static pages | `/:slug` |
@@ -48,3 +48,12 @@ See the [Cloudflare variant](../starter-cloudflare) for a version that deploys t
 
 - [All templates](../)
 - [EmDash documentation](https://github.com/emdash-cms/emdash/tree/main/docs)
+
+
+## Блог и EmDash
+
+Блог находится по адресу `/blog`, статьи — `/blog/:slug`.
+Содержимое редактируется в EmDash: `/_emdash/admin`, коллекция «Статьи» (`posts`).
+Поля статьи: заголовок, обложка, анонс и основной текст Portable Text.
+На странице блога показываются опубликованные статьи; черновики доступны через предпросмотр EmDash.
+В коллекции должен быть задан шаблон URL `/blog/{slug}` — он также указан в `seed/seed.json`.

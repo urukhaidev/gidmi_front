@@ -8,12 +8,15 @@ import {
 import { createPublicPageContext } from "emdash/page";
 import gidmiLogo from "../assets/gidmi.png";
 import SearchBox from "../components/SearchBox.astro";
+import { legalPages } from "../lib/legal-pages";
 import {
 	cityHref,
 	countryHref,
 	getCitySearchCategories,
 	getTopCities,
 	getTopCountries,
+	type CityTopRow,
+	type CountryTopRow,
 } from "../lib/travel-db.js";
 import { resolveStarterSiteIdentity } from "../utils/site-identity";
 
@@ -23,7 +26,9 @@ interface Props {
 	description?: string | null;
 	image?: string | null;
 	canonical?: string | null;
+	robots?: string | null;
 	headerSuggestions?: HeaderSuggestion[];
+	popularDestinations?: { cities: CityTopRow[]; countries: CountryTopRow[] };
 	/** Pass content reference for plugin page contributions on content pages */
 	content?: { collection: string; id: string; slug?: string | null };
 	searchCity?: {
@@ -50,18 +55,22 @@ const {
 	description,
 	image,
 	canonical,
+	robots,
 	content,
 	searchCity,
 	headerSuggestions: providedHeaderSuggestions,
+	popularDestinations,
 } = Astro.props;
 
 const navItems = [
 	{ label: "Страны", url: "/countries" },
 	{ label: "Города", url: "/cities" },
+	{ label: "Блог", url: "/blog" },
 	{ label: "Избранное", url: "/favorites" },
 	{ label: "О нас", url: "/about" },
 	{ label: "Отзывы", url: "/reviews" },
 	{ label: "Помощь", url: "/help" },
+	{ label: "Контакты", url: "/contacts" },
 ];
 
 const footerGroups = [
@@ -71,6 +80,7 @@ const footerGroups = [
 			{ label: "Главная", url: "/" },
 			{ label: "Все страны", url: "/countries" },
 			{ label: "Все города", url: "/cities" },
+			{ label: "Подбор экскурсий", url: "/podbor-ekskursiy" },
 			{ label: "Избранное", url: "/favorites" },
 		],
 	},
@@ -78,13 +88,20 @@ const footerGroups = [
 		title: "О Гидми",
 		links: [
 			{ label: "О проекте", url: "/about" },
+			{ label: "Блог", url: "/blog" },
 			{ label: "Отзывы путешественников", url: "/reviews" },
 			{ label: "Помощь", url: "/help" },
+			{ label: "Контакты", url: "/contacts" },
 		],
 	},
 ];
-const footerCitiesPromise = getTopCities(5);
-const footerCountriesPromise = getTopCountries(6);
+// Reuse the homepage's ranked lists for navigation instead of recounting them.
+const topCitiesPromise = popularDestinations
+	? Promise.resolve({ rows: popularDestinations.cities.slice(0, 10) })
+	: getTopCities(10);
+const topCountriesPromise = popularDestinations
+	? Promise.resolve({ rows: popularDestinations.countries.slice(0, 10) })
+	: getTopCountries(10);
 
 const socialLinks = [
 	{ label: "ВКонтакте", url: "#", icon: "vk" },
@@ -129,15 +146,15 @@ const headerSuggestionsPromise = providedHeaderSuggestions
 			countLabel: excursionLabel(tag.count),
 			href: tag.url,
 		})))
-		: Promise.all([getTopCountries(6), getTopCities(5)]).then(([countries, cities]) => [
-		...countries.rows.map((country) => ({
+		: Promise.all([topCountriesPromise, topCitiesPromise]).then(([countries, cities]) => [
+		...countries.rows.slice(0, 6).map((country) => ({
 			title: country.name,
 			subtitle: null,
 			count: country.experience_count,
 			countLabel: offerLabel(country.experience_count),
 			href: countryHref(country),
 		})),
-		...cities.rows.map((city) => ({
+		...cities.rows.slice(0, 5).map((city) => ({
 			title: city.name,
 			subtitle: city.country_name,
 			count: city.experience_count,
@@ -149,8 +166,8 @@ const headerSuggestionsPromise = providedHeaderSuggestions
 const { siteTitle, siteTagline } = resolveStarterSiteIdentity(await siteSettingsPromise);
 const [headerSuggestions, footerCities, footerCountries] = await Promise.all([
 	headerSuggestionsPromise,
-	footerCitiesPromise,
-	footerCountriesPromise,
+	topCitiesPromise,
+	topCountriesPromise,
 ]);
 const footerNavigation = [
 	...footerGroups,
@@ -196,6 +213,7 @@ const pageCtx = createPublicPageContext({
 		<title>{fullTitle}</title>
 		{pageDescription && <meta name="description" content={pageDescription} />}
 		{canonical && <link rel="canonical" href={canonical} />}
+		{robots && <meta name="robots" content={robots} />}
 		<EmDashHead page={pageCtx} />
 	</head>
 	<body>
@@ -374,6 +392,9 @@ const pageCtx = createPublicPageContext({
 						</ul>
 					</nav>
 				))}
+				<nav class="site-footer__legal" aria-label="Правовая информация">
+					{legalPages.map((page) => <a href={`/legal/${page.slug}`}>{page.title}</a>)}
+				</nav>
 				<div class="site-footer__bottom">
 					<p>© {new Date().getFullYear()} {siteTitle}</p>
 					<p>Выберите город и найдите свою следующую экскурсию.</p>
@@ -800,13 +821,23 @@ const pageCtx = createPublicPageContext({
 		line-height: 1.6;
 	}
 
+	.site-footer__legal {
+		grid-column: 1 / -1;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px 24px;
+		padding-top: 24px;
+		border-top: 1px solid rgba(255, 255, 255, 0.12);
+		font-size: 13px;
+		line-height: 1.6;
+	}
+
 	.site-footer__bottom {
 		grid-column: 1 / -1;
 		display: flex;
 		justify-content: space-between;
 		gap: 16px;
-		padding-top: 22px;
-		border-top: 1px solid rgba(255, 255, 255, 0.12);
+		padding-top: 0;
 		font-size: 13px;
 		line-height: 1.6;
 		color: rgba(255, 255, 255, 0.55);

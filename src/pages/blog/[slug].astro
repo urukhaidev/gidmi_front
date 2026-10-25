@@ -1,0 +1,58 @@
+---
+import { getEmDashEntry, getEntryTerms, getSeoMeta, decodeSlug, getSiteSettings } from "emdash";
+import { Image, PortableText } from "emdash/ui";
+import Base from "../../layouts/Base.astro";
+import { resolveStarterSiteIdentity } from "../../utils/site-identity";
+
+const slug = decodeSlug(Astro.params.slug);
+if (!slug) return Astro.rewrite("/404");
+const { entry: post, cacheHint, isPreview } = await getEmDashEntry("posts", slug);
+Astro.cache.set(cacheHint);
+if (!post) return Astro.rewrite("/404");
+const { siteTitle } = resolveStarterSiteIdentity(await getSiteSettings());
+const seo = getSeoMeta(post, { siteTitle, siteUrl: Astro.url.origin, path: `/blog/${encodeURIComponent(post.id)}` });
+const [tags, categories] = await Promise.all([
+	getEntryTerms("posts", post.data.id, "tag"),
+	getEntryTerms("posts", post.data.id, "category"),
+]);
+---
+
+<Base title={seo.title} pageTitle={seo.ogTitle} description={seo.description} canonical={seo.canonical} image={seo.ogImage} robots={isPreview ? "noindex, nofollow" : seo.robots} content={{ collection: "posts", id: post.data.id, slug: post.id }}>
+	<article class="blog-article">
+		<nav class="blog-article__breadcrumbs" aria-label="Хлебные крошки"><a href="/">Главная</a><span aria-hidden="true">/</span><a href="/blog">Блог</a></nav>
+		{isPreview && <p class="blog-article__preview">Предпросмотр публикации</p>}
+		{categories.length > 0 && <ul class="blog-article__terms">{categories.map((category) => <li><a href={`/blog?category=${encodeURIComponent(category.slug)}`}>{category.label}</a></li>)}</ul>}
+		<h1 {...post.edit.title}>{post.data.title}</h1>
+		{post.data.publishedAt && <time datetime={post.data.publishedAt.toISOString()}>{post.data.publishedAt.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}</time>}
+		{post.data.excerpt && <p class="blog-article__lead" {...post.edit.excerpt}>{post.data.excerpt}</p>}
+		{post.data.featured_image && <div class="blog-article__cover" {...post.edit.featured_image}><Image image={post.data.featured_image} /></div>}
+		<div class="blog-article__content" {...post.edit.content}><PortableText value={post.data.content} /></div>
+		{tags.length > 0 && <ul class="blog-article__terms blog-article__tags" aria-label="Темы статьи">{tags.map((tag) => <li><a href={`/blog?tag=${encodeURIComponent(tag.slug)}`}>{tag.label}</a></li>)}</ul>}
+		<a class="blog-article__back" href="/blog">← Все статьи</a>
+	</article>
+</Base>
+
+<style>
+	.blog-article { max-width: 840px; margin: 0 auto; padding: 40px var(--site-gutter) 64px; color: #1f2420; font-family: Manrope, ui-sans-serif, system-ui, sans-serif; overflow-wrap: anywhere; }
+	.blog-article__breadcrumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px; color: #687067; font-size: 13px; }
+	.blog-article__breadcrumbs a { color: inherit; }
+	.blog-article h1 { margin: 20px 0; font-size: clamp(30px, 4vw, 44px); line-height: 1.25; }
+	.blog-article time { display: block; margin-bottom: 24px; color: #687b8d; font-size: 14px; }
+	.blog-article__lead { margin: 24px 0; color: #596259; font-size: 20px; line-height: 1.7; }
+	.blog-article__cover { margin: 28px 0; overflow: hidden; border-radius: 14px; }
+	.blog-article__cover :global(figure) { margin: 0; }
+	.blog-article__cover :global(img) { display: block; width: 100%; height: auto; }
+	.blog-article__content { font-size: 17px; line-height: 1.85; }
+	.blog-article__content :global(p) { margin: 0 0 22px; }
+	.blog-article__content :global(h2) { margin: 36px 0 16px; font-size: 27px; line-height: 1.35; }
+	.blog-article__content :global(h3) { margin: 28px 0 14px; font-size: 22px; line-height: 1.4; }
+	.blog-article__content :global(img), .blog-article__content :global(video) { max-width: 100%; height: auto; }
+	.blog-article__content :global(pre), .blog-article__content :global(table) { max-width: 100%; overflow-x: auto; }
+	.blog-article__content :global(blockquote) { margin: 24px 0; padding: 12px 24px; border-left: 3px solid #0486fe; background: #f2f7fc; }
+	.blog-article__content :global(a), .blog-article__back { color: #0475df; text-underline-offset: 3px; }
+	.blog-article__terms { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0; list-style: none; }
+	.blog-article__terms a { display: inline-block; padding: 6px 12px; border-radius: 20px; background: #f1f5f8; color: #52616f; font-size: 13px; text-decoration: none; }
+	.blog-article__tags { margin-top: 32px; }
+	.blog-article__back { display: inline-block; margin-top: 36px; font-size: 15px; font-weight: 600; }
+	.blog-article__preview { padding: 12px 16px; border-radius: 8px; background: #fff5dc; color: #705a27; }
+</style>

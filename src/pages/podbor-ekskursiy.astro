@@ -1,0 +1,129 @@
+---
+import InformationPage from "../layouts/InformationPage.astro";
+
+const interests = ["Обзорные", "История и культура", "Гастрономические", "Природа и загородные поездки", "Музеи и искусство", "Необычные маршруты", "С детьми", "Активный отдых"];
+---
+
+<InformationPage title="Подбор экскурсий" description="Расскажите о поездке и выберите экскурсии по своим интересам.">
+	<p class="planner-lead">Ваша поездка — ваши впечатления. Расскажите, куда едете и что вам интересно.</p>
+	<p class="planner-note">Демо-анкета: пока здесь можно выбрать параметры поездки и посмотреть свои пожелания. Автоматический подбор появится позже.</p>
+
+	<form class="planner" data-trip-planner>
+		<fieldset>
+			<legend><span>1</span> Куда вы едете?</legend>
+			<label for="trip-destination">Страна или город</label>
+			<input id="trip-destination" name="destination" type="text" placeholder="Например, Италия, Рим" maxlength="150" required />
+		</fieldset>
+
+		<fieldset>
+			<legend><span>2</span> Сколько экскурсий вы хотели бы посетить?</legend>
+			<label for="trip-count">Количество экскурсий</label>
+			<input class="planner-count" id="trip-count" name="count" type="number" min="1" step="1" value="2" required />
+		</fieldset>
+
+		<fieldset>
+			<legend><span>3</span> Вы впервые в этой стране?</legend>
+			<div class="planner-options">
+				<label class="planner-choice"><input name="visit" type="radio" value="Первый раз" required /> Да, первый раз</label>
+				<label class="planner-choice"><input name="visit" type="radio" value="Уже бывал(а)" required /> Уже бывал(а)</label>
+			</div>
+		</fieldset>
+
+		<fieldset>
+			<legend><span>4</span> Какие экскурсии вам интересны?</legend>
+			<p class="planner-hint">Можно выбрать несколько вариантов. Если ничего не отметить, оставим любые темы.</p>
+			<div class="planner-interests">
+				{interests.map((interest) => (
+					<label class="planner-choice"><input name="interests" type="checkbox" value={interest} /> {interest}</label>
+				))}
+			</div>
+		</fieldset>
+
+		<fieldset>
+			<legend><span>5</span> Какой формат вам ближе?</legend>
+			<div class="planner-options">
+				<label class="planner-choice"><input name="format" type="radio" value="Любой" checked /> Любой</label>
+				<label class="planner-choice"><input name="format" type="radio" value="Индивидуальные" /> Индивидуальные</label>
+				<label class="planner-choice"><input name="format" type="radio" value="Групповые" /> Групповые</label>
+			</div>
+		</fieldset>
+
+		<button class="planner-submit" type="submit">Посмотреть мой выбор <span aria-hidden="true">→</span></button>
+	</form>
+
+	<section class="planner-result" data-planner-result hidden role="status" aria-live="polite" aria-atomic="true">
+		<h2>Ваши пожелания к поездке</h2>
+		<dl>
+			<div><dt>Направление</dt><dd data-result="destination"></dd></div>
+			<div><dt>Количество экскурсий</dt><dd data-result="count"></dd></div>
+			<div><dt>Знакомство со страной</dt><dd data-result="visit"></dd></div>
+			<div><dt>Интересы</dt><dd data-result="interests"></dd></div>
+			<div><dt>Формат</dt><dd data-result="format"></dd></div>
+		</dl>
+		<p>Это предварительный просмотр анкеты. Пока можно самостоятельно найти маршруты в <a href="/cities">каталоге городов</a>.</p>
+	</section>
+</InformationPage>
+
+<script>
+	const form = document.querySelector<HTMLFormElement>("[data-trip-planner]");
+	const result = document.querySelector<HTMLElement>("[data-planner-result]");
+	const destination = form?.querySelector<HTMLInputElement>("[name='destination']");
+	destination?.addEventListener("input", () => destination.setCustomValidity(""));
+	form?.addEventListener("submit", (event) => {
+		event.preventDefault();
+		if (!form || !destination || !result) return;
+		if (!destination.value.trim()) {
+			destination.setCustomValidity("Укажите страну или город.");
+			destination.reportValidity();
+			return;
+		}
+		const data = new FormData(form);
+		const values: Record<string, string> = {
+			destination: destination.value.trim(),
+			count: String(data.get("count") ?? ""),
+			visit: String(data.get("visit") ?? ""),
+			interests: data.getAll("interests").map(String).join(", ") || "Любые темы",
+			format: String(data.get("format") ?? "Любой"),
+		};
+		result.querySelectorAll<HTMLElement>("[data-result]").forEach((field) => {
+			field.textContent = values[field.dataset.result ?? ""] ?? "";
+		});
+		result.hidden = false;
+		result.scrollIntoView({ behavior: "smooth", block: "nearest" });
+	});
+</script>
+
+<style>
+	.planner-lead { font-size: 20px; }
+	.planner-note { padding: 16px 20px; border-radius: 10px; background: #f2f6fa; font-size: 14px; }
+	.planner { display: grid; gap: 28px; margin-top: 32px; }
+	.planner fieldset { min-width: 0; margin: 0; padding: 24px; border: 1px solid #e3e8ed; border-radius: 12px; }
+	.planner legend { max-width: 100%; padding: 0 8px; font-size: 17px; font-weight: 700; line-height: 1.6; }
+	.planner legend span { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-right: 8px; border-radius: 50%; background: #eaf4ff; color: #0475df; font-size: 14px; }
+	.planner fieldset > label { display: block; margin-bottom: 10px; font-size: 14px; color: #596259; }
+	.planner input[type="text"], .planner input[type="number"] { box-sizing: border-box; width: 100%; padding: 13px 14px; border: 1px solid #d5dce3; border-radius: 8px; background: #fff; color: #1f2420; font: inherit; }
+	.planner input.planner-count { max-width: 140px; }
+	.planner input:focus-visible, .planner-submit:focus-visible { outline: 3px solid #79beff; outline-offset: 3px; }
+	.planner-options { display: flex; flex-wrap: wrap; gap: 12px; }
+	.planner-interests { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+	.planner-choice { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid #e3e8ed; border-radius: 8px; font-size: 14px; line-height: 1.5; cursor: pointer; }
+	.planner-choice:has(input:checked) { border-color: #79beff; background: #f0f7ff; }
+	.planner-choice input { flex-shrink: 0; width: 18px; height: 18px; margin: 0; accent-color: #0486fe; }
+	.planner-hint { font-size: 14px; }
+	.planner-submit { justify-self: start; padding: 14px 22px; border: 0; border-radius: 8px; background: #0486fe; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+	.planner-submit:hover { background: #006fd7; }
+	.planner-result { margin-top: 32px; padding: 24px; border: 1px solid #c4dff8; border-radius: 12px; background: #f4f9ff; }
+	.planner-result[hidden] { display: none; }
+	.planner-result h2 { margin-top: 0; }
+	.planner-result dl { display: grid; gap: 16px; }
+	.planner-result dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 16px; font-size: 14px; line-height: 1.6; }
+	.planner-result dt { color: #687067; }
+	.planner-result dd { margin: 0; font-weight: 600; }
+	.planner-result p { margin-bottom: 0; font-size: 14px; }
+	@media (max-width: 600px) {
+		.planner fieldset { padding: 18px 14px; }
+		.planner-interests { grid-template-columns: 1fr; }
+		.planner-result dl > div { grid-template-columns: 1fr; gap: 4px; }
+		.planner-submit { width: 100%; }
+	}
+</style>

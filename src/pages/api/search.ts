@@ -8,14 +8,47 @@ import {
 	searchTravel,
 } from "../../lib/travel-db.js";
 
+const responseCache = new Map<string, { expiresAt: number; body: string }>();
+const resultCache = new Map<string, {
+	expiresAt: number;
+	result: ReturnType<typeof searchTravel>;
+}>();
+const getSearchResults = (q: string) => {
+	const key = q.trim().toLocaleLowerCase("ru-RU");
+	const cached = resultCache.get(key);
+	if (cached && cached.expiresAt > Date.now()) return cached.result;
+	if (resultCache.size >= 100) resultCache.delete(resultCache.keys().next().value!);
+	const result = (async () => {
+		const destinations = await searchTravel(q, 12, "destinations");
+		const response = destinations.error || destinations.rows.length
+			? destinations : await searchTravel(q, 12);
+		if (response.error) resultCache.delete(key);
+		return response;
+	})();
+	resultCache.set(key, { expiresAt: Date.now() + 30_000, result });
+	return result;
+};
+const searchResponse = (body: string) => new Response(body, {
+	headers: {
+		"Content-Type": "application/json; charset=utf-8",
+		"Cache-Control": "public, max-age=30, s-maxage=120, stale-while-revalidate=60",
+	},
+});
+
 export const GET: APIRoute = async ({ url, request }) => {
 	const q = url.searchParams.get("q") ?? "";
 
 	if (q.trim().length < 3) {
 		return Response.json({ results: [] });
 	}
+	const includeDetails = url.searchParams.get("details") !== "0";
+	const cacheKey = `${q.trim().toLocaleLowerCase("ru-RU")}:${includeDetails}`;
+	const cached = responseCache.get(cacheKey);
+	if (cached && cached.expiresAt > Date.now()) return searchResponse(cached.body);
 
-	const { rows: rawRows, error } = await searchTravel(q, 12);
+	// A destination match already gets its own relevant categories and excursions
+	// below; don't also aggregate matching categories across the entire catalogue.
+	const { rows: rawRows, error } = await getSearchResults(q);
 	if (request.signal.aborted) return new Response(null, { status: 204 });
 
 	if (error) {
@@ -33,7 +66,7 @@ export const GET: APIRoute = async ({ url, request }) => {
 	const cityId = city?.id ?? categoryCityId ?? experienceCityId;
 	const isCategorySearch = !city && Boolean(category);
 	const isExperienceSearch = !city && Boolean(experience);
-	const cityDetails = cityId && !request.signal.aborted
+	const cityDetails = includeDetails && cityId && !request.signal.aborted
 		? await Promise.all([
 			getCity(cityId),
 			getCitySearchCategories(cityId, 6),
@@ -99,12 +132,10 @@ export const GET: APIRoute = async ({ url, request }) => {
 		}
 		: null;
 
-	return Response.json(
-		{ results: rows, citySearch },
-		{
-			headers: {
-				"Cache-Control": "public, s-maxage=120, stale-while-revalidate=60",
-			},
-		},
-	);
+	const body = JSON.stringify({ results: rows, citySearch });
+	if (!cityDetails?.some((result) => result.error)) {
+		if (responseCache.size >= 100) responseCache.delete(responseCache.keys().next().value!);
+		responseCache.set(cacheKey, { expiresAt: Date.now() + 30_000, body });
+	}
+	return searchResponse(body);
 };
